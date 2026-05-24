@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fallbackMenuItems } from './data';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
-import type { ConnectionState, Fulfillment, MenuItem, OrderFormState } from './types';
+import { getCurrentStaffSession, signIn, signOut } from './lib/auth';
+import type { ConnectionState, Fulfillment, MenuItem, OrderFormState, OrderItem } from './types';
+import CartSidebar from './components/CartSidebar';
+import CheckoutModal from './components/CheckoutModal';
+import OrderSuccessModal from './components/OrderSuccessModal';
+import type { StaffSession } from './lib/auth';
 
 const deliveryFee = 55;
 const taxRate = 0.12;
@@ -44,6 +49,8 @@ const initialOrderForm: OrderFormState = {
   phone: '',
   email: '',
   fulfillment: 'pickup',
+  deliveryAddress: '',
+  paymentMethod: 'Cash on Delivery',
   notes: '',
 };
 
@@ -53,19 +60,6 @@ const initialStaffLogin = {
 };
 
 const categoryOrder = ['All', 'Espresso', 'Milk Drinks', 'Cold Brew', 'Bakery', 'Food'];
-
-type StaffRole = 'admin' | 'staff';
-
-type StaffSession = {
-  email: string;
-  name: string;
-  role: StaffRole;
-};
-
-type StaffProfileRow = {
-  full_name: string | null;
-  role: string | null;
-};
 
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(amount);
@@ -90,6 +84,79 @@ const normalizeMenuItem = (row: Partial<MenuItem> & { id: string }): MenuItem =>
   prep_time: row.prep_time,
 });
 
+const getDeliveryDetails = (address: string, lat?: number | null, lng?: number | null) => {
+  const normalized = address.trim().toLowerCase();
+  // Cafe coordinates (approx)
+  const cafeLat = 14.6498;
+  const cafeLng = 121.0509;
+
+  const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const R = 6371; // km
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  if (lat != null && lng != null) {
+    const distKm = haversineKm(cafeLat, cafeLng, lat, lng);
+    const base = 35; // base service fee
+    const perKm = 8; // per km
+    const fee = Math.min(150, Math.max(35, Math.round((base + perKm * distKm) / 5) * 5));
+    const etaMin = Math.max(25, Math.round(15 + distKm * 4));
+    return {
+      zone: `${distKm.toFixed(1)} km from cafe`,
+      fee,
+      eta: `${etaMin}–${etaMin + 15} min`,
+      note: 'Calculated from selected pin; final ETA may vary.',
+    };
+  }
+  if (!normalized) {
+    return {
+      zone: 'Standard delivery zone',
+      fee: deliveryFee,
+      eta: 'Estimate after address is entered',
+      note: 'Enter your exact delivery location for a better quote.',
+    };
+  }
+
+  if (normalized.includes('makati') || normalized.includes('taguig') || normalized.includes('bonifacio') || normalized.includes('bgc')) {
+    return {
+      zone: 'Metro Manila express',
+      fee: 75,
+      eta: '45–55 min',
+      note: 'Premium urban delivery with live route optimization.',
+    };
+  }
+
+  if (normalized.includes('quezon') || normalized.includes('diliman') || normalized.includes('up') || normalized.includes('katipunan') || normalized.includes('san juan')) {
+    return {
+      zone: 'Quezon City delivery zone',
+      fee: 55,
+      eta: '30–40 min',
+      note: 'Fast delivery within the local cafe district.',
+    };
+  }
+
+  if (normalized.includes('pasig') || normalized.includes('marikina') || normalized.includes('mandaluyong')) {
+    return {
+      zone: 'East Metro route',
+      fee: 65,
+      eta: '40–50 min',
+      note: 'Extended delivery zone with an extra service charge.',
+    };
+  }
+
+  return {
+    zone: 'Nearby service area',
+    fee: 80,
+    eta: '45–60 min',
+    note: 'Your address is still within reach, but delivery takes a little longer.',
+  };
+};
+
 export default function App() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>(fallbackMenuItems);
   const [category, setCategory] = useState('All');
@@ -102,6 +169,10 @@ export default function App() {
   const [staffLoginOpen, setStaffLoginOpen] = useState(false);
   const [staffLoginError, setStaffLoginError] = useState('');
   const [staffLoginForm, setStaffLoginForm] = useState(initialStaffLogin);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [orderSuccessOpen, setOrderSuccessOpen] = useState(false);
+  const [lastOrderCode, setLastOrderCode] = useState('');
+  const [lastOrderFulfillment, setLastOrderFulfillment] = useState<Fulfillment>('pickup');
 
   useEffect(() => {
     let mounted = true;
@@ -129,7 +200,7 @@ export default function App() {
         return;
       }
 
-      setMenuItems(data.map((row) => normalizeMenuItem(row)));
+      setMenuItems((data as any[]).map((row) => normalizeMenuItem(row)));
       setConnectionState('connected');
       setBanner('Live menu loaded from Supabase.');
     };
@@ -157,14 +228,19 @@ export default function App() {
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const tax = subtotal * taxRate;
-  const selectedDeliveryFee = orderForm.fulfillment === 'delivery' ? deliveryFee : 0;
+  const deliveryInfo = getDeliveryDetails(orderForm.deliveryAddress, orderForm.deliveryLat ?? null, orderForm.deliveryLng ?? null);
+  const selectedDeliveryFee = orderForm.fulfillment === 'delivery' ? deliveryInfo.fee : 0;
   const total = subtotal + tax + selectedDeliveryFee;
   const canPlaceOrder = Boolean(
-    orderForm.name.trim() && orderForm.phone.trim() && cartItems.length > 0 && !submitting,
+    orderForm.name.trim() && orderForm.phone.trim() && cartItems.length > 0 && orderForm.paymentMethod && !submitting && (orderForm.fulfillment === 'pickup' || orderForm.deliveryAddress.trim()),
   );
 
   const updateForm = (field: keyof OrderFormState, value: string) => {
     setOrderForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const setDeliveryLocation = (address: string, lat: number | null, lng: number | null) => {
+    setOrderForm((current) => ({ ...current, deliveryAddress: address, deliveryLat: lat, deliveryLng: lng }));
   };
 
   const changeQuantity = (id: string, delta: number) => {
@@ -182,63 +258,33 @@ export default function App() {
     });
   };
 
-  const getStaffSessionForUser = async (
-    userId: string,
-    emailFallback: string,
-  ): Promise<{ session: StaffSession | null; error: string | null }> => {
-    if (!supabase) {
-      return { session: null, error: 'Supabase is not configured.' };
+  const clearCart = () => setCart({});
+
+  const openCheckout = () => setCheckoutOpen(true);
+  const closeCheckout = () => setCheckoutOpen(false);
+  const closeSuccess = () => setOrderSuccessOpen(false);
+
+  const createOrderCode = () => `ORD-${Date.now().toString().slice(-6)}`;
+
+  const formatEstimatedDelivery = (fulfillment: Fulfillment = orderForm.fulfillment) => {
+    if (fulfillment === 'delivery') {
+      const address = orderForm.deliveryAddress.trim().toLowerCase();
+      if (!address) return 'Estimate available after address is entered.';
+      if (address.includes('makati') || address.includes('taguig') || address.includes('bonifacio') || address.includes('bgc')) return '45–55 min';
+      if (address.includes('quezon') || address.includes('diliman') || address.includes('up') || address.includes('katipunan') || address.includes('san juan')) return '30–40 min';
+      return '40–50 min';
     }
-
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('full_name,role')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (error) {
-      return { session: null, error: error.message };
-    }
-
-    if (!data) {
-      return { session: null, error: 'No staff profile found for this account.' };
-    }
-
-    const profile = data as StaffProfileRow;
-    if (profile.role !== 'admin' && profile.role !== 'staff') {
-      return { session: null, error: 'This account is not allowed to access the staff console.' };
-    }
-
-    return {
-      session: {
-        email: emailFallback,
-        name: profile.full_name || emailFallback,
-        role: profile.role as StaffRole,
-      },
-      error: null,
-    };
+    return 'Ready in 10 min';
   };
+
+  
 
   useEffect(() => {
     let mounted = true;
 
     const restoreStaffSession = async () => {
-      if (!supabase) return;
-
-      const { data, error } = await supabase.auth.getSession();
-      if (error || !data.session?.user || !mounted) return;
-
-      const user = data.session.user;
-      const { session, error: profileError } = await getStaffSessionForUser(user.id, user.email || '');
-
+      const session = await getCurrentStaffSession();
       if (!mounted) return;
-
-      if (!session || profileError) {
-        await supabase.auth.signOut();
-        setStaffSession(null);
-        return;
-      }
-
       setStaffSession(session);
     };
 
@@ -264,52 +310,27 @@ export default function App() {
     const loginValue = staffLoginForm.login.trim();
     const password = staffLoginForm.password;
 
-    if (!supabase) {
-      setStaffLoginError('Supabase is not configured. Add env keys first.');
-      return;
-    }
-
     if (!loginValue || !password) {
       setStaffLoginError('Username/email and password are required.');
       return;
     }
 
-    let email = loginValue;
-    if (!loginValue.includes('@')) {
-      const { data, error } = await supabase.rpc('lookup_staff_email', { login_value: loginValue });
-
-      if (error || !data) {
-        setStaffLoginError('Unknown username. Use the email or a registered username.');
-        return;
-      }
-
-      email = String(data);
-    }
-
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error || !data.user) {
-      setStaffLoginError(error?.message ?? 'Sign in failed.');
+    const result = await signIn(loginValue, password);
+    if (result.error || !result.session) {
+      setStaffLoginError(result.error ?? 'Sign in failed.');
       return;
     }
 
-    const { session, error: profileError } = await getStaffSessionForUser(data.user.id, data.user.email || email);
-
-    if (!session || profileError) {
-      await supabase.auth.signOut();
-      setStaffLoginError(profileError || 'This account is not allowed to access the staff console.');
-      return;
-    }
-
-    setStaffSession(session);
-    setBanner(`${session.role === 'admin' ? 'Admin' : 'Staff'} access granted for ${session.name}.`);
+    setStaffSession(result.session);
+    setBanner(`${result.session.role === 'admin' ? 'Admin' : 'Staff'} access granted for ${result.session.name}.`);
     closeStaffLogin();
+    if (result.session.role === 'admin') {
+      window.location.hash = '/admin';
+    }
   };
 
   const logoutStaff = async () => {
-    if (supabase) {
-      await supabase.auth.signOut();
-    }
+    await signOut();
     setStaffSession(null);
     setBanner('Staff session ended.');
   };
@@ -327,12 +348,14 @@ export default function App() {
 
     setSubmitting(true);
 
-    const payload = {
+    const payload: any = {
       customer_name: orderForm.name.trim(),
       customer_phone: orderForm.phone.trim(),
       customer_email: orderForm.email.trim() || null,
       fulfillment: orderForm.fulfillment,
       notes: orderForm.notes.trim() || null,
+      // delivery coords are optional; enable via REACT_APP_INCLUDE_DELIVERY_COORDS=true
+      // This avoids insert failures when the DB schema doesn't have these columns yet.
       items: cartItems.map((item) => ({ id: item.id, name: item.name, price: item.price, quantity: item.quantity })),
       subtotal,
       tax,
@@ -341,24 +364,58 @@ export default function App() {
       status: 'new',
     };
 
+    if (process.env.REACT_APP_INCLUDE_DELIVERY_COORDS === 'true' && orderForm.deliveryLat != null && orderForm.deliveryLng != null) {
+      payload.delivery_lat = orderForm.deliveryLat;
+      payload.delivery_lng = orderForm.deliveryLng;
+    }
+
     if (!supabase) {
       setBanner('Demo mode only. Connect Supabase to store this order.');
       setSubmitting(false);
       return;
     }
 
-    const { error } = await supabase.from('orders').insert(payload);
+    let resultError = null as any;
+    let inserted = false;
 
-    if (error) {
-      setBanner(`Order save failed: ${error.message}`);
+    try {
+      const res = await supabase.from('orders').insert(payload);
+      resultError = res.error;
+      inserted = !res.error;
+    } catch (e) {
+      resultError = e;
+    }
+
+    // If the insert failed due to missing delivery columns, retry without coords
+    if (resultError) {
+      const msg = String(resultError.message ?? resultError);
+      const missingCoords = /delivery_lat|delivery_lng|Could not find the 'delivery_lat'|Could not find the 'delivery_lng'|column \"delivery_lat\" of relation \"orders\" does not exist/i.test(msg);
+      if (missingCoords) {
+        const { delivery_lat, delivery_lng, ...payloadWithoutCoords } = payload as any;
+        try {
+          const retry = await supabase.from('orders').insert(payloadWithoutCoords);
+          resultError = retry.error;
+          inserted = !retry.error;
+        } catch (e) {
+          resultError = e;
+        }
+      }
+    }
+
+    if (resultError) {
+      setBanner(`Order save failed: ${String(resultError.message ?? resultError)}`);
       setSubmitting(false);
       return;
     }
 
     setCart({});
+    setLastOrderCode(createOrderCode());
+    setLastOrderFulfillment(orderForm.fulfillment);
+    setOrderSuccessOpen(true);
     setOrderForm(initialOrderForm);
     setBanner('Order saved to Supabase.');
     setSubmitting(false);
+    closeCheckout();
   };
 
   const staffButtonLabel = staffSession ? 'Logout' : 'Staff login';
@@ -392,6 +449,15 @@ export default function App() {
                   className="rounded-full bg-gold px-4 py-2 font-semibold text-coffee-950 transition hover:brightness-110"
                 >
                   {staffButtonLabel}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.location.hash = '/admin';
+                  }}
+                  className="rounded-full border border-white/10 px-3 py-1 text-sm text-cream/70"
+                >
+                  Open admin
                 </button>
               </div>
             </div>
@@ -572,124 +638,40 @@ export default function App() {
               </div>
             </section>
 
-            <section className="rounded-[2rem] border border-white/10 bg-white/5 p-5">
-              <p className="text-xs uppercase tracking-[0.28em] text-cream/45">Checkout</p>
-              <h3 className="mt-2 font-display text-3xl text-cream">Pickup or delivery</h3>
+            <CartSidebar
+              cartItems={cartItems}
+              subtotal={subtotal}
+              tax={tax}
+              deliveryFee={selectedDeliveryFee}
+              total={total}
+              fulfillment={orderForm.fulfillment}
+              onChangeQuantity={changeQuantity}
+              onOpenCheckout={openCheckout}
+              onClearCart={clearCart}
+            />
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <label className="space-y-2 text-sm text-cream/70">
-                  <span className="font-semibold text-cream">Customer name</span>
-                  <input
-                    value={orderForm.name}
-                    onChange={(event) => updateForm('name', event.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-cream outline-none transition placeholder:text-cream/30 focus:border-gold/60"
-                    placeholder="Anna Santos"
-                  />
-                </label>
-                <label className="space-y-2 text-sm text-cream/70">
-                  <span className="font-semibold text-cream">Phone</span>
-                  <input
-                    value={orderForm.phone}
-                    onChange={(event) => updateForm('phone', event.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-cream outline-none transition placeholder:text-cream/30 focus:border-gold/60"
-                    placeholder="0917 123 4567"
-                  />
-                </label>
-              </div>
-
-              <label className="mt-3 block space-y-2 text-sm text-cream/70">
-                <span className="font-semibold text-cream">Email</span>
-                <input
-                  value={orderForm.email}
-                  onChange={(event) => updateForm('email', event.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-cream outline-none transition placeholder:text-cream/30 focus:border-gold/60"
-                  placeholder="anna@example.com"
-                  type="email"
-                />
-              </label>
-
-              <label className="mt-3 block space-y-2 text-sm text-cream/70">
-                <span className="font-semibold text-cream">Fulfillment</span>
-                <select
-                  value={orderForm.fulfillment}
-                  onChange={(event) => updateForm('fulfillment', event.target.value as Fulfillment)}
-                  className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-cream outline-none transition focus:border-gold/60"
-                >
-                  <option value="pickup">Pickup</option>
-                  <option value="delivery">Delivery</option>
-                </select>
-              </label>
-
-              <label className="mt-3 block space-y-2 text-sm text-cream/70">
-                <span className="font-semibold text-cream">Notes</span>
-                <textarea
-                  value={orderForm.notes}
-                  onChange={(event) => updateForm('notes', event.target.value)}
-                  rows={4}
-                  className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-cream outline-none transition placeholder:text-cream/30 focus:border-gold/60"
-                  placeholder="Extra hot, less sugar, one extra cup."
-                />
-              </label>
-
-              <div className="mt-4 space-y-3 rounded-[1.5rem] border border-white/10 bg-black/20 p-4">
-                <div className="flex items-center justify-between text-sm text-cream/70">
-                  <span>Cart items</span>
-                  <span>{cartItems.length}</span>
-                </div>
-                {cartItems.length ? (
-                  <div className="space-y-3">
-                    {cartItems.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
-                        <div>
-                          <div className="font-semibold text-cream">{item.name}</div>
-                          <div className="text-sm text-cream/55">{formatCurrency(item.price)} each</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button type="button" onClick={() => changeQuantity(item.id, -1)} className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-sm text-cream transition hover:border-gold/40">
-                            -
-                          </button>
-                          <span className="w-7 text-center text-sm font-semibold text-cream">{item.quantity}</span>
-                          <button type="button" onClick={() => changeQuantity(item.id, 1)} className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-sm text-cream transition hover:border-gold/40">
-                            +
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-cream/55">Add items from the menu to build the checkout.</p>
-                )}
-              </div>
-
-              <div className="mt-4 space-y-2 rounded-[1.5rem] border border-white/10 bg-black/20 p-4 text-sm text-cream/70">
-                <div className="flex justify-between">
-                  <span>Subtotal</span>
-                  <span>{formatCurrency(subtotal)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Tax</span>
-                  <span>{formatCurrency(tax)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Delivery fee</span>
-                  <span>{formatCurrency(selectedDeliveryFee)}</span>
-                </div>
-                <div className="mt-2 flex justify-between border-t border-white/10 pt-3 text-base font-semibold text-cream">
-                  <span>Total</span>
-                  <span>{formatCurrency(total)}</span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={placeOrder}
-                disabled={!canPlaceOrder}
-                title={!canPlaceOrder ? 'Add a customer name, phone, and at least one cart item before placing the order.' : undefined}
-                className="mt-4 w-full rounded-full bg-gradient-to-r from-gold via-amber-500 to-ember px-5 py-4 text-sm font-bold uppercase tracking-[0.2em] text-coffee-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {submitting ? 'Saving order...' : 'Place order'}
-              </button>
-            </section>
+            <CheckoutModal
+              isOpen={checkoutOpen}
+              orderForm={orderForm}
+              cartItems={cartItems}
+              subtotal={subtotal}
+              tax={tax}
+              deliveryFee={selectedDeliveryFee}
+              total={total}
+              onClose={closeCheckout}
+              onUpdateForm={updateForm}
+              onSetDeliveryLocation={setDeliveryLocation}
+              onSubmit={placeOrder}
+              submitting={submitting}
+              canSubmit={canPlaceOrder}
+            />
+            <OrderSuccessModal
+              isOpen={orderSuccessOpen}
+              orderCode={lastOrderCode}
+              fulfillment={lastOrderFulfillment}
+              estimatedDeliveryTime={formatEstimatedDelivery(lastOrderFulfillment)}
+              onClose={closeSuccess}
+            />
 
             <section className="rounded-[2rem] border border-white/10 bg-white/5 p-5">
               <div className="flex items-center justify-between gap-3">
@@ -738,6 +720,15 @@ export default function App() {
                   Sign in to view the staff console.
                 </div>
               )}
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => (window.location.hash = '/admin')}
+                  className="mt-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-cream/70"
+                >
+                  Open admin page
+                </button>
+              </div>
             </section>
           </aside>
         </section>

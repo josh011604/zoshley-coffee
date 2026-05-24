@@ -54,3 +54,13 @@ The app expects these tables:
 - `npm test`
 - `npm run build`
 - `npm run typecheck`
+
+## Mapbox (optional)
+
+To enable address autocomplete and map previews, add a Mapbox token to your environment. Copy `.env.example` to `.env.local` and set the token:
+
+```bash
+REACT_APP_MAPBOX_TOKEN=pk.your_mapbox_token_here
+```
+
+If you don't set a token the app will use a small demo fallback for address suggestions.
