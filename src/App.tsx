@@ -3,6 +3,7 @@ import { fallbackMenuItems } from './data';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { getCurrentStaffSession, signIn, signOut } from './lib/auth';
 import { menuStorageKey, menuSyncEventName, readMenuCache, writeMenuCache } from './lib/menu';
+import { categoryStorageKey, categorySyncEventName, readCategoryCache } from './lib/categories';
 import type { ConnectionState, Fulfillment, MenuItem, OrderFormState } from './types';
 import CartSidebar from './components/CartSidebar';
 import CheckoutModal from './components/CheckoutModal';
@@ -160,6 +161,7 @@ const getDeliveryDetails = (address: string, lat?: number | null, lng?: number |
 
 export default function App() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>(() => readMenuCache() ?? fallbackMenuItems);
+  const [cachedCategories, setCachedCategories] = useState(() => readCategoryCache() ?? []);
   const [category, setCategory] = useState('All');
   const [connectionState, setConnectionState] = useState<ConnectionState>('loading');
   const [banner, setBanner] = useState('Checking live menu source...');
@@ -175,6 +177,20 @@ export default function App() {
   const [lastOrderCode, setLastOrderCode] = useState('');
   const [lastOrderFulfillment, setLastOrderFulfillment] = useState<Fulfillment>('pickup');
   const [whatsNewOpen, setWhatsNewOpen] = useState(true);
+
+  const mergeMenuItems = (cachedItems: MenuItem[], remoteItems: MenuItem[]) => {
+    const byId = new Map<string, MenuItem>();
+
+    for (const item of remoteItems) {
+      byId.set(item.id, item);
+    }
+
+    for (const item of cachedItems) {
+      byId.set(item.id, item);
+    }
+
+    return Array.from(byId.values());
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -202,7 +218,9 @@ export default function App() {
         return;
       }
 
-      const nextMenu = (data as any[]).map((row) => normalizeMenuItem(row));
+      const remoteMenu = (data as any[]).map((row) => normalizeMenuItem(row));
+      const cachedMenu = readMenuCache() ?? [];
+      const nextMenu = mergeMenuItems(cachedMenu, remoteMenu);
       setMenuItems(nextMenu);
       writeMenuCache(nextMenu);
       setConnectionState('connected');
@@ -224,27 +242,37 @@ export default function App() {
       }
     };
 
+    const syncCategoriesFromCache = () => {
+      const nextCategories = readCategoryCache() ?? [];
+      setCachedCategories(nextCategories);
+    };
+
     const onStorage = (event: StorageEvent) => {
       if (event.key === null || event.key === menuStorageKey) {
         syncFromCache();
       }
+      if (event.key === null || event.key === categoryStorageKey) {
+        syncCategoriesFromCache();
+      }
     };
 
     window.addEventListener(menuSyncEventName, syncFromCache);
+    window.addEventListener(categorySyncEventName, syncCategoriesFromCache);
     window.addEventListener('storage', onStorage);
 
     return () => {
       window.removeEventListener(menuSyncEventName, syncFromCache);
+      window.removeEventListener(categorySyncEventName, syncCategoriesFromCache);
       window.removeEventListener('storage', onStorage);
     };
   }, []);
 
   const categories = useMemo(() => {
-    const dynamicCategories = Array.from(new Set(menuItems.map((item) => item.category)));
+    const dynamicCategories = Array.from(new Set([...menuItems.map((item) => item.category), ...cachedCategories.map((item) => item.name)]));
     return categoryOrder.filter((item) => item === 'All' || dynamicCategories.includes(item)).concat(
       dynamicCategories.filter((item) => !categoryOrder.includes(item)),
     );
-  }, [menuItems]);
+  }, [menuItems, cachedCategories]);
 
   const visibleMenu = menuItems.filter((item) => (category === 'All' ? true : item.category === category));
   const featuredMenu = useMemo(() => menuItems.filter((item) => item.featured).slice(0, 3), [menuItems]);

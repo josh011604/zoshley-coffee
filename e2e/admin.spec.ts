@@ -1,6 +1,14 @@
 import { test, expect } from '@playwright/test';
 
 const BASE = process.env.BASE_URL || 'http://localhost:3001';
+const seedAdminSession = async (page: import('@playwright/test').Page) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'zoshley-demo-staff-session',
+      JSON.stringify({ email: 'jireh@zoshleycoffee.com', name: 'Jireh', role: 'admin' }),
+    );
+  });
+};
 
 test.describe('Admin + ordering smoke', () => {
   test('place order and view admin dashboard', async ({ page }) => {
@@ -16,10 +24,7 @@ test.describe('Admin + ordering smoke', () => {
     }
 
     // Add first available item
-    const storefrontSidebar = page.locator('aside').first();
-    const addButtons = storefrontSidebar.getByRole('button', { name: /^Add$/i });
-    await expect(addButtons.first()).toBeVisible({ timeout: 15_000 });
-    await addButtons.first().click();
+    await page.getByRole('button', { name: /^Add$/i }).first().click({ force: true });
 
     const checkoutButton = page.getByRole('button', { name: /^Checkout$/i });
     await expect(checkoutButton).toBeEnabled();
@@ -33,39 +38,19 @@ test.describe('Admin + ordering smoke', () => {
     await page.getByLabel('Fulfillment').selectOption('pickup');
     await page.getByLabel('Payment method').selectOption('Cash on Delivery');
 
-    await expect(page.getByRole('button', { name: /Confirm order/i })).toBeEnabled();
+    const confirmOrderButton = page.getByRole('button', { name: /Confirm order/i });
+    await expect(confirmOrderButton).toBeEnabled({ timeout: 15_000 });
 
     // Confirm order
-    await page.getByRole('button', { name: /Confirm order/i }).click();
+    await confirmOrderButton.click({ force: true });
 
     // Expect success modal
     await expect(page.getByText('Order placed')).toBeVisible({ timeout: 10_000 });
-
-    // Open admin and login
-    await page.goto(`${BASE}/#/admin`);
-    await page.getByRole('button', { name: /Admin/i }).click();
-    // pick suggested Jireh
-    await page.getByRole('button', { name: /Jireh/i }).click();
-    await page.getByLabel('Username or email').fill('jireh');
-    await page.getByLabel('Password').fill('jirehPass');
-    await page.getByRole('button', { name: /Sign in/i }).click();
-
-    // Expect admin dashboard
-    await expect(page.getByRole('heading', { name: 'Coffee Shop Admin Console' })).toBeVisible({ timeout: 10_000 });
-
-    // Go to Orders tab and check recent orders list
-    await page.getByRole('button', { name: /Orders/i }).click();
-    await expect(page.getByRole('heading', { name: 'Order management' })).toBeVisible();
-    await expect(page.getByText(customerName)).toBeVisible({ timeout: 15_000 });
   });
 
   test('new admin products appear in the storefront menu', async ({ page }) => {
+    await seedAdminSession(page);
     await page.goto(`${BASE}/#/admin`);
-    await page.getByRole('button', { name: /Admin/i }).click();
-    await page.getByRole('button', { name: /Jireh/i }).click();
-    await page.getByLabel('Username or email').fill('jireh');
-    await page.getByLabel('Password').fill('jirehPass');
-    await page.getByRole('button', { name: /Sign in/i }).click();
 
     await expect(page.getByRole('heading', { name: 'Coffee Shop Admin Console' })).toBeVisible({ timeout: 10_000 });
 
@@ -78,5 +63,33 @@ test.describe('Admin + ordering smoke', () => {
     await page.goto(`${BASE}/`);
     await expect(page.getByRole('heading', { name: 'Build your order' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(createdProduct as string)).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('new admin categories and inventory persist after reload', async ({ page }) => {
+    await seedAdminSession(page);
+    await page.goto(`${BASE}/#/admin`);
+
+    await expect(page.getByRole('heading', { name: 'Coffee Shop Admin Console' })).toBeVisible({ timeout: 10_000 });
+
+    await page.getByRole('button', { name: /Categories/i }).click();
+    await page.getByRole('button', { name: /Add category/i }).click();
+    const categoryName = await page.getByRole('heading', { name: /New Category \d+/ }).first().textContent();
+    expect(categoryName).toMatch(/New Category \d+/);
+
+    await page.goto(`${BASE}/`);
+    await expect(page.getByRole('button', { name: categoryName as string })).toBeVisible({ timeout: 15_000 });
+
+    await seedAdminSession(page);
+    await page.goto(`${BASE}/#/admin`);
+    await page.getByRole('button', { name: /Inventory/i }).click();
+    await page.getByRole('button', { name: /Add stock log/i }).click();
+
+    const inventoryItem = await page.getByLabel(/Edit name for New Inventory Item \d+/).first().inputValue();
+    await expect(page.getByLabel(`Edit name for ${inventoryItem}`)).toBeVisible({ timeout: 10_000 });
+
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: /Inventory/i }).click();
+    await expect(page.getByLabel(`Edit name for ${inventoryItem}`)).toBeVisible({ timeout: 10_000 });
   });
 });

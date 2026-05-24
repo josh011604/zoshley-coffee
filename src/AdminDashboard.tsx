@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { signIn, signOut, getCurrentStaffSession, StaffSession as AuthStaffSession } from './lib/auth';
 import { emitMenuSync, readMenuCache, writeMenuCache } from './lib/menu';
+import { emitCategorySync, readCategoryCache, writeCategoryCache } from './lib/categories';
 import type { MenuItem } from './types';
 import AdminLoginPanel from './components/AdminLoginPanel';
 
@@ -84,6 +85,11 @@ type EditModalState =
       role: StaffRole;
     }
   | null;
+
+type SyncStatus = {
+  label: string;
+  state: 'idle' | 'saving' | 'saved' | 'error';
+};
 
 const sampleOrders: OrderRow[] = [
   {
@@ -218,7 +224,7 @@ const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [orders, setOrders] = useState<OrderRow[]>(sampleOrders);
   const [products, setProducts] = useState<MenuItem[]>(() => readMenuCache() ?? sampleProducts);
-  const [categories, setCategories] = useState<CategoryRow[]>(sampleCategories);
+  const [categories, setCategories] = useState<CategoryRow[]>(() => readCategoryCache() ?? sampleCategories);
   const [inventory, setInventory] = useState<InventoryRow[]>(() => {
     if (typeof window === 'undefined') return sampleInventory;
     try {
@@ -246,6 +252,7 @@ const AdminDashboard: React.FC = () => {
   const [newStaff, setNewStaff] = useState<{ name: string; email: string; role: StaffRole }>({ name: '', email: '', role: 'staff' });
   const [reportRange, setReportRange] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [editModal, setEditModal] = useState<EditModalState>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>({ label: 'Ready to save', state: 'idle' });
 
   const overview = useMemo(
     () => ({
@@ -257,6 +264,7 @@ const AdminDashboard: React.FC = () => {
   );
 
   const persistProducts = async (updater: (current: MenuItem[]) => MenuItem[]) => {
+    setSyncStatus({ label: 'Saving products', state: 'saving' });
     setProducts((current) => {
       const nextProducts = updater(current);
 
@@ -287,6 +295,8 @@ const AdminDashboard: React.FC = () => {
           // Keep the local edit even if the API is unavailable.
         });
       }
+
+      setSyncStatus({ label: 'Products saved', state: 'saved' });
 
       return nextProducts;
     });
@@ -329,7 +339,14 @@ const AdminDashboard: React.FC = () => {
 
   const addCategory = () => {
     const nextIndex = categories.length + 1;
-    setCategories((current) => [{ id: `category-${Date.now()}`, name: `New Category ${nextIndex}`, parent: undefined }, ...current]);
+    setSyncStatus({ label: 'Saving categories', state: 'saving' });
+    setCategories((current) => {
+      const nextCategories = [{ id: `category-${Date.now()}`, name: `New Category ${nextIndex}`, parent: undefined }, ...current];
+      writeCategoryCache(nextCategories);
+      emitCategorySync();
+      setSyncStatus({ label: 'Categories saved', state: 'saved' });
+      return nextCategories;
+    });
   };
 
   const editCategory = (categoryId: string) => {
@@ -387,6 +404,7 @@ const AdminDashboard: React.FC = () => {
   };
 
   const persistInventory = async (updater: (current: InventoryRow[]) => InventoryRow[]) => {
+    setSyncStatus({ label: 'Saving inventory', state: 'saving' });
     setInventory((current) => {
       const nextInventory = updater(current);
 
@@ -416,6 +434,8 @@ const AdminDashboard: React.FC = () => {
         });
       }
 
+      setSyncStatus({ label: 'Inventory saved', state: 'saved' });
+
       return nextInventory;
     });
   };
@@ -437,6 +457,7 @@ const AdminDashboard: React.FC = () => {
 
     if (editModal.kind === 'product') {
       const price = Number(editModal.price);
+      setSyncStatus({ label: 'Saving products', state: 'saving' });
       void persistProducts((current) =>
         current.map((product) =>
           product.id === editModal.id
@@ -453,8 +474,9 @@ const AdminDashboard: React.FC = () => {
         ),
       );
     } else if (editModal.kind === 'category') {
-      setCategories((current) =>
-        current.map((category) =>
+      setSyncStatus({ label: 'Saving categories', state: 'saving' });
+      setCategories((current) => {
+        const nextCategories = current.map((category) =>
           category.id === editModal.id
             ? {
                 ...category,
@@ -462,8 +484,12 @@ const AdminDashboard: React.FC = () => {
                 parent: editModal.parent.trim() || undefined,
               }
             : category,
-        ),
-      );
+        );
+        writeCategoryCache(nextCategories);
+        emitCategorySync();
+        setSyncStatus({ label: 'Categories saved', state: 'saved' });
+        return nextCategories;
+      });
     } else if (editModal.kind === 'staff') {
       setStaffList((current) =>
         current.map((staff) =>
@@ -533,6 +559,7 @@ const AdminDashboard: React.FC = () => {
               } catch {
                 // Ignore local storage errors.
               }
+              setSyncStatus({ label: 'Inventory loaded', state: 'saved' });
             }
           }
         } catch {
@@ -568,6 +595,7 @@ const AdminDashboard: React.FC = () => {
           }));
         setProducts(nextProducts);
         writeMenuCache(nextProducts);
+          setSyncStatus({ label: 'Products loaded', state: 'saved' });
       }
 
       if (!profilesResult.error && profilesResult.data?.length) {
@@ -586,6 +614,10 @@ const AdminDashboard: React.FC = () => {
 
     void loadData();
   }, []);
+
+      if (categories.length) {
+        writeCategoryCache(categories);
+      }
 
   const submitLogin = async () => {
     setError('');
@@ -663,6 +695,23 @@ const AdminDashboard: React.FC = () => {
               </button>
             ) : null}
           </div>
+        </div>
+
+        <div className="mb-6 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-cream/70">
+          <span>{syncStatus.label}</span>
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              syncStatus.state === 'saving'
+                ? 'bg-amber-500/15 text-amber-200'
+                : syncStatus.state === 'saved'
+                  ? 'bg-emerald-500/15 text-emerald-200'
+                  : syncStatus.state === 'error'
+                    ? 'bg-red-500/15 text-red-200'
+                    : 'bg-white/10 text-cream/60'
+            }`}
+          >
+            {syncStatus.state === 'saving' ? 'Saving' : syncStatus.state === 'saved' ? 'Saved' : syncStatus.state === 'error' ? 'Sync error' : 'Idle'}
+          </span>
         </div>
 
         <div className={`${staffSession ? 'grid gap-8 xl:grid-cols-[260px_1fr]' : 'space-y-6'}`}>
