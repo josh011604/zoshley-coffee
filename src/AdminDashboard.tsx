@@ -168,8 +168,8 @@ const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [orders, setOrders] = useState<OrderRow[]>(sampleOrders);
   const [products, setProducts] = useState<MenuItem[]>(sampleProducts);
-  const [categories, setCategories] = useState<CategoryRow[]>(sampleCategories);
-  const [inventory, setInventory] = useState<InventoryRow[]>(sampleInventory);
+  const [categories] = useState<CategoryRow[]>(sampleCategories);
+  const [inventory] = useState<InventoryRow[]>(sampleInventory);
   const [staffList, setStaffList] = useState<StaffRow[]>(sampleStaff);
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderRow | null>(null);

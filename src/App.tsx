@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { fallbackMenuItems } from './data';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { getCurrentStaffSession, signIn, signOut } from './lib/auth';
-import type { ConnectionState, Fulfillment, MenuItem, OrderFormState, OrderItem } from './types';
+import type { ConnectionState, Fulfillment, MenuItem, OrderFormState } from './types';
 import CartSidebar from './components/CartSidebar';
 import CheckoutModal from './components/CheckoutModal';
 import OrderSuccessModal from './components/OrderSuccessModal';
@@ -376,12 +376,10 @@ export default function App() {
     }
 
     let resultError = null as any;
-    let inserted = false;
 
     try {
       const res = await supabase.from('orders').insert(payload);
       resultError = res.error;
-      inserted = !res.error;
     } catch (e) {
       resultError = e;
     }
@@ -395,7 +393,6 @@ export default function App() {
         try {
           const retry = await supabase.from('orders').insert(payloadWithoutCoords);
           resultError = retry.error;
-          inserted = !retry.error;
         } catch (e) {
           resultError = e;
         }

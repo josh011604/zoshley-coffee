@@ -1,5 +1,5 @@
 import React from 'react';
-import type { OrderItem, PaymentMethod } from '../types';
+import type { OrderItem } from '../types';
 
 type CartSidebarProps = {
   cartItems: OrderItem[];
