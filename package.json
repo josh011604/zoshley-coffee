@@ -14,7 +14,6 @@
     "web-vitals": "^2.1.4"
   },
   "devDependencies": {
-    "@supabase/cli-windows-x64": "^1.0.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.15.21",
     "@types/react": "^19.1.8",
@@ -29,7 +28,6 @@
     "dev": "set PORT=3000 && react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "postinstall": "powershell -ExecutionPolicy Bypass -File scripts/install-supabase-cli.ps1",
     "typecheck": "tsc --noEmit",
     "eject": "react-scripts eject"
   },
