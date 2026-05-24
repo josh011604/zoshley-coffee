@@ -18,7 +18,8 @@ type DemoStaffUser = StaffSession & {
 const DEMO_STAFF_SESSION_KEY = 'zoshley-demo-staff-session';
 
 const demoStaffUsers: DemoStaffUser[] = [
-  { username: 'jireh', email: 'rita@zoshleycoffee.com', password: 'faithCart', name: 'Rita Bautista', role: 'admin' },
+  { username: 'jireh', email: 'jireh@zoshleycoffee.com', password: 'jirehPass', name: 'Jireh', role: 'admin' },
+  { username: 'rita', email: 'rita@zoshleycoffee.com', password: 'faithCart', name: 'Rita Bautista', role: 'admin' },
   { username: 'maria', email: 'maria@zoshley.com', password: 'staff123', name: 'Maria Santos', role: 'staff' },
   { username: 'juan', email: 'juan@zoshley.com', password: 'staff456', name: 'Juan dela Cruz', role: 'staff' },
 ];

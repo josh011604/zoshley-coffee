@@ -109,6 +109,7 @@ const sampleInventory: InventoryRow[] = [
 
 const sampleStaff: StaffRow[] = [
   { id: 'staff-1', name: 'Rita Bautista', email: 'rita@zoshleycoffee.com', role: 'admin' },
+  { id: 'staff-jireh', name: 'Jireh', email: 'jireh@zoshleycoffee.com', role: 'admin' },
   { id: 'staff-2', name: 'Maria Santos', email: 'maria@zoshley.com', role: 'staff' },
   { id: 'staff-3', name: 'Juan dela Cruz', email: 'juan@zoshley.com', role: 'staff' },
 ];
@@ -173,6 +174,8 @@ const AdminDashboard: React.FC = () => {
   const [staffList, setStaffList] = useState<StaffRow[]>(sampleStaff);
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderRow | null>(null);
+  const [addStaffOpen, setAddStaffOpen] = useState(false);
+  const [newStaff, setNewStaff] = useState<{ name: string; email: string; role: StaffRole }>({ name: '', email: '', role: 'staff' });
 
   const overview = useMemo(
     () => ({
@@ -576,7 +579,9 @@ const AdminDashboard: React.FC = () => {
                         <p className="text-xs uppercase tracking-[0.28em] text-cream/45">Staff management</p>
                         <h2 className="mt-2 font-display text-3xl text-cream">Team accounts</h2>
                       </div>
-                      <button type="button" className="rounded-full bg-gold px-4 py-3 font-semibold text-coffee-950">Add staff</button>
+                      {staffSession?.role === 'admin' ? (
+                        <button type="button" onClick={() => setAddStaffOpen(true)} className="rounded-full bg-gold px-4 py-3 font-semibold text-coffee-950">Add staff</button>
+                      ) : null}
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                       {staffList.map((staff) => (
@@ -591,6 +596,45 @@ const AdminDashboard: React.FC = () => {
                         </div>
                       ))}
                     </div>
+                    {addStaffOpen ? (
+                      <div className="mt-6 rounded-2xl border border-white/10 bg-black/10 p-4">
+                        <h4 className="font-semibold text-cream">Create new staff account</h4>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                          <input className="rounded border p-2 bg-black/20 text-cream" placeholder="Full name" value={newStaff.name} onChange={(e) => setNewStaff((s) => ({ ...s, name: e.target.value }))} />
+                          <input className="rounded border p-2 bg-black/20 text-cream" placeholder="Email" value={newStaff.email} onChange={(e) => setNewStaff((s) => ({ ...s, email: e.target.value }))} />
+                          <select className="rounded border p-2 bg-black/20 text-cream" value={newStaff.role} onChange={(e) => setNewStaff((s) => ({ ...s, role: e.target.value as StaffRole }))}>
+                            <option value="staff">Staff</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        </div>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            className="rounded-full bg-gold px-4 py-2 font-semibold text-coffee-950"
+                            onClick={async () => {
+                              // create profile in Supabase if available, otherwise update local state
+                              const entry: StaffRow = { id: `staff-${Date.now()}`, name: newStaff.name || newStaff.email, email: newStaff.email, role: newStaff.role };
+                              if (isSupabaseConfigured && supabase) {
+                                try {
+                                  await supabase.from('profiles').insert({ full_name: entry.name, email: entry.email, role: entry.role });
+                                  setStaffList((cur) => [entry, ...cur]);
+                                } catch (e) {
+                                  // fallback to local
+                                  setStaffList((cur) => [entry, ...cur]);
+                                }
+                              } else {
+                                setStaffList((cur) => [entry, ...cur]);
+                              }
+                              setNewStaff({ name: '', email: '', role: 'staff' });
+                              setAddStaffOpen(false);
+                            }}
+                          >
+                            Create
+                          </button>
+                          <button type="button" onClick={() => setAddStaffOpen(false)} className="rounded-full border border-white/10 px-4 py-2">Cancel</button>
+                        </div>
+                      </div>
+                    ) : null}
                   </section>
                 ) : null}
 

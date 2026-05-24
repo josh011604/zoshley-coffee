@@ -179,10 +179,10 @@ export default function App() {
     let mounted = true;
 
     const loadMenu = async () => {
-      if (!supabase) {
+        if (!supabase) {
         if (mounted) {
           setConnectionState('demo');
-          setBanner('Supabase env vars are missing, so the menu is running in demo mode.');
+          setBanner('Menu is running locally. Live menu will appear when configured.');
         }
         return;
       }
@@ -197,7 +197,7 @@ export default function App() {
 
       if (error || !data?.length) {
         setConnectionState('demo');
-        setBanner('Live menu is not configured yet. Enjoy our demo selections while the cafe menu is being prepared.');
+        setBanner('Live menu is not configured yet. Showing local selections.');
         return;
       }
 
@@ -371,7 +371,7 @@ export default function App() {
     }
 
     if (!supabase) {
-      setBanner('Demo mode only. Connect Supabase to store this order.');
+      setBanner('Local mode only. Connect Supabase to store this order.');
       setSubmitting(false);
       return;
     }
@@ -433,7 +433,7 @@ export default function App() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3 text-sm text-cream/70">
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">{connectionState === 'connected' ? 'Live menu' : 'Demo menu'}</span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">{connectionState === 'connected' ? 'Live menu' : 'Menu'}</span>
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">Pickup, delivery, and custom orders</span>
                 <button
                   type="button"
@@ -465,10 +465,12 @@ export default function App() {
         <section className="mx-auto grid max-w-7xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[1.15fr_0.85fr] lg:px-8 lg:py-12">
           <div className="space-y-8">
             <div className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-[#1a100b] to-[#090604] p-6 shadow-2xl shadow-black/30 lg:p-8">
-              <div className="inline-flex items-center gap-2 rounded-full border border-gold/25 bg-gold/10 px-4 py-2 text-sm font-semibold text-gold">
-                <span className="h-2 w-2 rounded-full bg-gold" />
-                {banner}
-              </div>
+              {staffSession?.role === 'admin' ? (
+                <div className="inline-flex items-center gap-2 rounded-full border border-gold/25 bg-gold/10 px-4 py-2 text-sm font-semibold text-gold">
+                  <span className="h-2 w-2 rounded-full bg-gold" />
+                  {banner}
+                </div>
+              ) : null}
 
               {whatsNewOpen && (
                 <div className="mt-4 rounded-lg border border-white/10 bg-black/10 p-4 text-sm text-cream/85">
@@ -610,8 +612,8 @@ export default function App() {
                   <p className="text-xs uppercase tracking-[0.28em] text-cream/45">Live orders</p>
                   <h3 className="mt-2 font-display text-3xl text-cream">Build your order</h3>
                 </div>
-                <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-cream/60">
-                  {isSupabaseConfigured ? connectionState : 'Demo'}
+                  <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-cream/60">
+                  {isSupabaseConfigured ? connectionState : 'Local'}
                 </span>
               </div>
 
