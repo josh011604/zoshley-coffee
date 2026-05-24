@@ -78,6 +78,13 @@ create policy "Anyone can create orders"
   for insert
   with check (true);
 
+-- Demo dashboard and verification scripts can read the latest orders.
+drop policy if exists "Anyone can read orders" on public.orders;
+create policy "Anyone can read orders"
+  on public.orders
+  for select
+  using (true);
+
 -- Optional admin/service role access for menu items and orders.
 drop policy if exists "Service role can manage menu items" on public.menu_items;
 create policy "Service role can manage menu items"

@@ -46,6 +46,12 @@ const clearDemoSession = () => {
   window.localStorage.removeItem(DEMO_STAFF_SESSION_KEY);
 };
 
+const isJirehAdminIdentity = (email: string, name?: string | null) => {
+  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedName = name?.trim().toLowerCase();
+  return normalizedEmail === 'jireh@gmail.com' || normalizedEmail === 'jireh@zoshleycoffee.com' || normalizedName === 'jireh';
+};
+
 const findDemoStaffSession = (loginValue: string, password: string): StaffSession | null => {
   const normalized = loginValue.trim().toLowerCase();
   const user = demoStaffUsers.find(
@@ -61,7 +67,10 @@ export const isConfigured = isSupabaseConfigured;
 
 export async function signIn(loginValue: string, password: string): Promise<{ session: StaffSession | null; error?: string }> {
   const demoSession = findDemoStaffSession(loginValue, password);
-  if (demoSession && !supabase) {
+  if (demoSession) {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
     saveDemoSession(demoSession);
     return { session: demoSession };
   }
@@ -115,17 +124,27 @@ export async function getStaffProfile(userId: string, emailFallback: string): Pr
   const { data, error } = await supabase.from('profiles').select('full_name,role').eq('id', userId).maybeSingle();
   if (error || !data) return null;
   const profile = data as StaffProfileRow;
-  if (profile.role !== 'admin' && profile.role !== 'staff') return null;
-  return { email: emailFallback, name: profile.full_name || emailFallback, role: profile.role as StaffRole };
+  const role: StaffRole | null = profile.role === 'admin' || profile.role === 'staff' ? (profile.role as StaffRole) : null;
+  if (!role) return null;
+
+  const resolvedName = profile.full_name || emailFallback;
+  const resolvedRole = isJirehAdminIdentity(emailFallback, resolvedName) ? 'admin' : role;
+
+  return { email: emailFallback, name: resolvedName, role: resolvedRole };
 }
 
 export async function getCurrentStaffSession(): Promise<StaffSession | null> {
+  const demoSession = getDemoSessionFromStorage();
+  if (demoSession) {
+    return demoSession;
+  }
+
   if (!supabase) {
-    return getDemoSessionFromStorage();
+    return null;
   }
   const { data, error } = await supabase.auth.getSession();
   if (error || !data.session?.user) {
-    return getDemoSessionFromStorage();
+    return null;
   }
   const user = data.session.user;
   return getStaffProfile(user.id, user.email || '');

@@ -57,6 +57,32 @@ type ReviewRow = {
   date: string;
 };
 
+type EditModalState =
+  | {
+      kind: 'product';
+      id: string;
+      name: string;
+      description: string;
+      category: string;
+      price: string;
+      featured: boolean;
+      is_available: boolean;
+    }
+  | {
+      kind: 'category';
+      id: string;
+      name: string;
+      parent: string;
+    }
+  | {
+      kind: 'staff';
+      id: string;
+      name: string;
+      email: string;
+      role: StaffRole;
+    }
+  | null;
+
 const sampleOrders: OrderRow[] = [
   {
     id: 'ORD-3241',
@@ -169,13 +195,15 @@ const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [orders, setOrders] = useState<OrderRow[]>(sampleOrders);
   const [products, setProducts] = useState<MenuItem[]>(sampleProducts);
-  const [categories] = useState<CategoryRow[]>(sampleCategories);
-  const [inventory] = useState<InventoryRow[]>(sampleInventory);
+  const [categories, setCategories] = useState<CategoryRow[]>(sampleCategories);
+  const [inventory, setInventory] = useState<InventoryRow[]>(sampleInventory);
   const [staffList, setStaffList] = useState<StaffRow[]>(sampleStaff);
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderRow | null>(null);
   const [addStaffOpen, setAddStaffOpen] = useState(false);
   const [newStaff, setNewStaff] = useState<{ name: string; email: string; role: StaffRole }>({ name: '', email: '', role: 'staff' });
+  const [reportRange, setReportRange] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [editModal, setEditModal] = useState<EditModalState>(null);
 
   const overview = useMemo(
     () => ({
@@ -185,6 +213,135 @@ const AdminDashboard: React.FC = () => {
     }),
     [orders],
   );
+
+  const addProduct = () => {
+    const nextIndex = products.length + 1;
+    setProducts((current) => [
+      {
+        id: `product-${Date.now()}`,
+        name: `New Product ${nextIndex}`,
+        description: 'Created from the admin dashboard.',
+        category: categories[0]?.name || 'Espresso',
+        price: 0,
+        featured: false,
+        is_available: true,
+      },
+      ...current,
+    ]);
+  };
+
+  const editProduct = (productId: string) => {
+    const product = products.find((item) => item.id === productId);
+    if (!product) return;
+    setEditModal({
+      kind: 'product',
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      category: product.category,
+      price: String(product.price),
+      featured: Boolean(product.featured),
+      is_available: Boolean(product.is_available),
+    });
+  };
+
+  const deleteProduct = (productId: string) => {
+    setProducts((current) => current.filter((product) => product.id !== productId));
+  };
+
+  const addCategory = () => {
+    const nextIndex = categories.length + 1;
+    setCategories((current) => [{ id: `category-${Date.now()}`, name: `New Category ${nextIndex}`, parent: undefined }, ...current]);
+  };
+
+  const editCategory = (categoryId: string) => {
+    const category = categories.find((item) => item.id === categoryId);
+    if (!category) return;
+    setEditModal({
+      kind: 'category',
+      id: category.id,
+      name: category.name,
+      parent: category.parent ?? '',
+    });
+  };
+
+  const addStockLog = () => {
+    setInventory((current) => [
+      {
+        product: `New Inventory Item ${current.length + 1}`,
+        stock: 0,
+        threshold: 0,
+        lastUpdated: new Date().toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      },
+      ...current,
+    ]);
+  };
+
+  const editStaff = (staffId: string) => {
+    const staff = staffList.find((item) => item.id === staffId);
+    if (!staff) return;
+    setEditModal({
+      kind: 'staff',
+      id: staff.id,
+      name: staff.name,
+      email: staff.email,
+      role: staff.role,
+    });
+  };
+
+  const saveEditModal = () => {
+    if (!editModal) return;
+
+    if (editModal.kind === 'product') {
+      const price = Number(editModal.price);
+      setProducts((current) =>
+        current.map((product) =>
+          product.id === editModal.id
+            ? {
+                ...product,
+                name: editModal.name.trim() || product.name,
+                description: editModal.description.trim() || product.description,
+                category: editModal.category.trim() || product.category,
+                price: Number.isFinite(price) ? price : product.price,
+                featured: editModal.featured,
+                is_available: editModal.is_available,
+              }
+            : product,
+        ),
+      );
+    } else if (editModal.kind === 'category') {
+      setCategories((current) =>
+        current.map((category) =>
+          category.id === editModal.id
+            ? {
+                ...category,
+                name: editModal.name.trim() || category.name,
+                parent: editModal.parent.trim() || undefined,
+              }
+            : category,
+        ),
+      );
+    } else if (editModal.kind === 'staff') {
+      setStaffList((current) =>
+        current.map((staff) =>
+          staff.id === editModal.id
+            ? {
+                ...staff,
+                name: editModal.name.trim() || staff.name,
+                email: editModal.email.trim() || staff.email,
+                role: editModal.role,
+              }
+            : staff,
+        ),
+      );
+    }
+
+    setEditModal(null);
+  };
+
+  const deleteStaff = (staffId: string) => {
+    setStaffList((current) => current.filter((staff) => staff.id !== staffId));
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -482,7 +639,7 @@ const AdminDashboard: React.FC = () => {
                         <p className="text-xs uppercase tracking-[0.28em] text-cream/45">Products/Services</p>
                         <h2 className="mt-2 font-display text-3xl text-cream">Catalog management</h2>
                       </div>
-                      <button type="button" className="rounded-full bg-gold px-4 py-3 font-semibold text-coffee-950">Add new product</button>
+                      <button type="button" onClick={addProduct} className="rounded-full bg-gold px-4 py-3 font-semibold text-coffee-950">Add new product</button>
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                       {products.map((product) => (
@@ -502,8 +659,8 @@ const AdminDashboard: React.FC = () => {
                             {product.featured ? <span className="rounded-full border border-white/10 px-3 py-1 text-sm text-cream/70">Featured</span> : null}
                           </div>
                           <div className="mt-5 flex flex-wrap gap-2">
-                            <button type="button" className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-cream">Edit</button>
-                            <button type="button" className="rounded-full border border-white/10 bg-black/30 px-3 py-2 text-sm text-cream">Delete</button>
+                            <button type="button" onClick={() => editProduct(product.id)} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-cream">Edit</button>
+                            <button type="button" onClick={() => deleteProduct(product.id)} className="rounded-full border border-white/10 bg-black/30 px-3 py-2 text-sm text-cream">Delete</button>
                           </div>
                         </div>
                       ))}
@@ -518,7 +675,7 @@ const AdminDashboard: React.FC = () => {
                         <p className="text-xs uppercase tracking-[0.28em] text-cream/45">Categories</p>
                         <h2 className="mt-2 font-display text-3xl text-cream">Category management</h2>
                       </div>
-                      <button type="button" className="rounded-full bg-gold px-4 py-3 font-semibold text-coffee-950">Add category</button>
+                      <button type="button" onClick={addCategory} className="rounded-full bg-gold px-4 py-3 font-semibold text-coffee-950">Add category</button>
                     </div>
                     <div className="grid gap-4">
                       {categories.map((category) => (
@@ -528,7 +685,7 @@ const AdminDashboard: React.FC = () => {
                               <p className="text-sm text-cream/70">{category.parent ? `Subcategory of ${category.parent}` : 'Top-level category'}</p>
                               <h3 className="mt-1 text-xl font-semibold text-cream">{category.name}</h3>
                             </div>
-                            <button type="button" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-cream transition hover:border-gold/30">
+                            <button type="button" onClick={() => editCategory(category.id)} className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-cream transition hover:border-gold/30">
                               Edit
                             </button>
                           </div>
@@ -545,7 +702,7 @@ const AdminDashboard: React.FC = () => {
                         <p className="text-xs uppercase tracking-[0.28em] text-cream/45">Inventory</p>
                         <h2 className="mt-2 font-display text-3xl text-cream">Stock management</h2>
                       </div>
-                      <button type="button" className="rounded-full bg-gold px-4 py-3 font-semibold text-coffee-950">Add stock log</button>
+                      <button type="button" onClick={addStockLog} className="rounded-full bg-gold px-4 py-3 font-semibold text-coffee-950">Add stock log</button>
                     </div>
                     <div className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-black/20">
                       <table className="min-w-full divide-y divide-white/10 text-left text-sm text-cream">
@@ -590,8 +747,8 @@ const AdminDashboard: React.FC = () => {
                           <h3 className="mt-2 text-xl font-semibold text-cream">{staff.name}</h3>
                           <p className="mt-1 text-sm text-cream/70">{staff.email}</p>
                           <div className="mt-5 flex flex-wrap gap-2">
-                            <button type="button" className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-cream">Edit</button>
-                            <button type="button" className="rounded-full border border-white/10 bg-black/30 px-3 py-2 text-sm text-cream">Delete</button>
+                            <button type="button" onClick={() => editStaff(staff.id)} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-cream">Edit</button>
+                            <button type="button" onClick={() => deleteStaff(staff.id)} className="rounded-full border border-white/10 bg-black/30 px-3 py-2 text-sm text-cream">Delete</button>
                           </div>
                         </div>
                       ))}
@@ -614,10 +771,32 @@ const AdminDashboard: React.FC = () => {
                             onClick={async () => {
                               // create profile in Supabase if available, otherwise update local state
                               const entry: StaffRow = { id: `staff-${Date.now()}`, name: newStaff.name || newStaff.email, email: newStaff.email, role: newStaff.role };
-                              if (isSupabaseConfigured && supabase) {
+                              if (isSupabaseConfigured) {
+                                // Prefer a secure server-side endpoint that uses the Supabase service_role key.
                                 try {
-                                  await supabase.from('profiles').insert({ full_name: entry.name, email: entry.email, role: entry.role });
-                                  setStaffList((cur) => [entry, ...cur]);
+                                  const adminSecret = process.env.REACT_APP_ADMIN_API_SECRET;
+                                  if (adminSecret) {
+                                    const resp = await fetch('/api/create-staff', {
+                                      method: 'POST',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'x-admin-secret': adminSecret,
+                                      },
+                                      body: JSON.stringify({ name: entry.name, email: entry.email, role: entry.role }),
+                                    });
+                                    if (resp.ok) {
+                                      setStaffList((cur) => [entry, ...cur]);
+                                    } else {
+                                      // fallback to direct Supabase insert if serverless endpoint not available
+                                      if (supabase) await supabase.from('profiles').insert({ full_name: entry.name, email: entry.email, role: entry.role });
+                                      setStaffList((cur) => [entry, ...cur]);
+                                    }
+                                  } else if (supabase) {
+                                    await supabase.from('profiles').insert({ full_name: entry.name, email: entry.email, role: entry.role });
+                                    setStaffList((cur) => [entry, ...cur]);
+                                  } else {
+                                    setStaffList((cur) => [entry, ...cur]);
+                                  }
                                 } catch (e) {
                                   // fallback to local
                                   setStaffList((cur) => [entry, ...cur]);
@@ -646,9 +825,9 @@ const AdminDashboard: React.FC = () => {
                         <h2 className="mt-2 font-display text-3xl text-cream">Revenue charts</h2>
                       </div>
                       <div className="flex flex-wrap gap-3 text-sm text-cream/70">
-                        <button type="button" className="rounded-full border border-white/10 bg-black/20 px-4 py-2">Daily</button>
-                        <button type="button" className="rounded-full border border-white/10 bg-black/20 px-4 py-2">Weekly</button>
-                        <button type="button" className="rounded-full border border-white/10 bg-black/20 px-4 py-2">Monthly</button>
+                        <button type="button" onClick={() => setReportRange('daily')} className={`rounded-full border px-4 py-2 ${reportRange === 'daily' ? 'border-gold bg-gold/15 text-cream' : 'border-white/10 bg-black/20 text-cream/70'}`}>Daily</button>
+                        <button type="button" onClick={() => setReportRange('weekly')} className={`rounded-full border px-4 py-2 ${reportRange === 'weekly' ? 'border-gold bg-gold/15 text-cream' : 'border-white/10 bg-black/20 text-cream/70'}`}>Weekly</button>
+                        <button type="button" onClick={() => setReportRange('monthly')} className={`rounded-full border px-4 py-2 ${reportRange === 'monthly' ? 'border-gold bg-gold/15 text-cream' : 'border-white/10 bg-black/20 text-cream/70'}`}>Monthly</button>
                       </div>
                     </div>
                     <div className="grid gap-4 lg:grid-cols-3">
@@ -664,6 +843,9 @@ const AdminDashboard: React.FC = () => {
                         <p className="text-sm text-cream/70">Weekly growth</p>
                         <p className="mt-3 text-2xl font-semibold text-cream">+18%</p>
                       </div>
+                    </div>
+                    <div className="mt-6 rounded-[1.75rem] border border-white/10 bg-black/20 p-5 text-sm text-cream/70">
+                      Showing <span className="font-semibold text-cream capitalize">{reportRange}</span> report view.
                     </div>
                   </section>
                 ) : null}
@@ -694,6 +876,149 @@ const AdminDashboard: React.FC = () => {
                       ))}
                     </div>
                   </section>
+                ) : null}
+
+                {editModal ? (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm">
+                    <div className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-[#0f0906] p-6 shadow-2xl shadow-black/60">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.28em] text-cream/45">Edit {editModal.kind}</p>
+                          <h2 className="mt-2 font-display text-3xl text-cream">Update details</h2>
+                        </div>
+                        <button type="button" onClick={() => setEditModal(null)} className="rounded-full border border-white/10 bg-black/20 px-4 py-2 text-sm text-cream/70">
+                          Close
+                        </button>
+                      </div>
+
+                      <div className="mt-6 space-y-4 rounded-[1.75rem] border border-white/10 bg-black/20 p-5">
+                        {editModal.kind === 'product' ? (
+                          <>
+                            <label className="block space-y-2 text-sm text-cream/70">
+                              <span className="font-semibold text-cream">Name</span>
+                              <input
+                                value={editModal.name}
+                                onChange={(event) => setEditModal((current) => (current && current.kind === 'product' ? { ...current, name: event.target.value } : current))}
+                                className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition focus:border-gold/60"
+                              />
+                            </label>
+                            <label className="block space-y-2 text-sm text-cream/70">
+                              <span className="font-semibold text-cream">Description</span>
+                              <textarea
+                                value={editModal.description}
+                                onChange={(event) => setEditModal((current) => (current && current.kind === 'product' ? { ...current, description: event.target.value } : current))}
+                                rows={3}
+                                className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition focus:border-gold/60"
+                              />
+                            </label>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                              <label className="block space-y-2 text-sm text-cream/70">
+                                <span className="font-semibold text-cream">Category</span>
+                                <input
+                                  value={editModal.category}
+                                  onChange={(event) => setEditModal((current) => (current && current.kind === 'product' ? { ...current, category: event.target.value } : current))}
+                                  className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition focus:border-gold/60"
+                                />
+                              </label>
+                              <label className="block space-y-2 text-sm text-cream/70">
+                                <span className="font-semibold text-cream">Price</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={editModal.price}
+                                  onChange={(event) => setEditModal((current) => (current && current.kind === 'product' ? { ...current, price: event.target.value } : current))}
+                                  className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition focus:border-gold/60"
+                                />
+                              </label>
+                            </div>
+                            <div className="flex flex-wrap gap-3 text-sm text-cream/70">
+                              <label className="inline-flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={editModal.featured}
+                                  onChange={(event) => setEditModal((current) => (current && current.kind === 'product' ? { ...current, featured: event.target.checked } : current))}
+                                />
+                                Featured
+                              </label>
+                              <label className="inline-flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={editModal.is_available}
+                                  onChange={(event) => setEditModal((current) => (current && current.kind === 'product' ? { ...current, is_available: event.target.checked } : current))}
+                                />
+                                Available
+                              </label>
+                            </div>
+                          </>
+                        ) : null}
+
+                        {editModal.kind === 'category' ? (
+                          <>
+                            <label className="block space-y-2 text-sm text-cream/70">
+                              <span className="font-semibold text-cream">Category name</span>
+                              <input
+                                value={editModal.name}
+                                onChange={(event) => setEditModal((current) => (current && current.kind === 'category' ? { ...current, name: event.target.value } : current))}
+                                className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition focus:border-gold/60"
+                              />
+                            </label>
+                            <label className="block space-y-2 text-sm text-cream/70">
+                              <span className="font-semibold text-cream">Parent category</span>
+                              <input
+                                value={editModal.parent}
+                                onChange={(event) => setEditModal((current) => (current && current.kind === 'category' ? { ...current, parent: event.target.value } : current))}
+                                className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition focus:border-gold/60"
+                                placeholder="Optional"
+                              />
+                            </label>
+                          </>
+                        ) : null}
+
+                        {editModal.kind === 'staff' ? (
+                          <>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                              <label className="block space-y-2 text-sm text-cream/70">
+                                <span className="font-semibold text-cream">Full name</span>
+                                <input
+                                  value={editModal.name}
+                                  onChange={(event) => setEditModal((current) => (current && current.kind === 'staff' ? { ...current, name: event.target.value } : current))}
+                                  className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition focus:border-gold/60"
+                                />
+                              </label>
+                              <label className="block space-y-2 text-sm text-cream/70">
+                                <span className="font-semibold text-cream">Email</span>
+                                <input
+                                  value={editModal.email}
+                                  onChange={(event) => setEditModal((current) => (current && current.kind === 'staff' ? { ...current, email: event.target.value } : current))}
+                                  className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition focus:border-gold/60"
+                                />
+                              </label>
+                            </div>
+                            <label className="block space-y-2 text-sm text-cream/70">
+                              <span className="font-semibold text-cream">Role</span>
+                              <select
+                                value={editModal.role}
+                                onChange={(event) => setEditModal((current) => (current && current.kind === 'staff' ? { ...current, role: event.target.value as StaffRole } : current))}
+                                className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition focus:border-gold/60"
+                              >
+                                <option value="staff">Staff</option>
+                                <option value="admin">Admin</option>
+                              </select>
+                            </label>
+                          </>
+                        ) : null}
+
+                        <div className="flex flex-wrap gap-3">
+                          <button type="button" onClick={saveEditModal} className="rounded-full bg-gold px-4 py-3 font-semibold text-coffee-950">
+                            Save changes
+                          </button>
+                          <button type="button" onClick={() => setEditModal(null)} className="rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm text-cream">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 ) : null}
               </>
             )}
