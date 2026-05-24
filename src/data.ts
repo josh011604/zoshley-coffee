@@ -1,0 +1,73 @@
+import type { MenuItem } from './types';
+
+export const fallbackMenuItems: MenuItem[] = [
+  {
+    id: 'espresso',
+    name: 'Espresso',
+    description: 'A short, intense shot with a bright crema and deep chocolate finish.',
+    category: 'Espresso',
+    price: 95,
+    featured: true,
+    is_available: true,
+    icon: '☕',
+    prep_time: '4 min',
+  },
+  {
+    id: 'cappuccino',
+    name: 'Cappuccino',
+    description: 'Velvet milk foam over a balanced double shot and toasted aroma.',
+    category: 'Espresso',
+    price: 135,
+    featured: true,
+    is_available: true,
+    icon: '🌫️',
+    prep_time: '5 min',
+  },
+  {
+    id: 'latte',
+    name: 'Vanilla Latte',
+    description: 'Smooth espresso, steamed milk, and a clean vanilla lift.',
+    category: 'Milk Drinks',
+    price: 145,
+    is_available: true,
+    icon: '🥛',
+    prep_time: '6 min',
+  },
+  {
+    id: 'cold-brew',
+    name: 'Cold Brew',
+    description: 'Slow-steeped for 12 hours to keep it crisp, smooth, and naturally sweet.',
+    category: 'Cold Brew',
+    price: 155,
+    featured: true,
+    is_available: true,
+    icon: '🧊',
+    prep_time: '3 min',
+  },
+  {
+    id: 'croissant',
+    name: 'Butter Croissant',
+    description: 'Flaky layers, golden crust, and a rich buttery center.',
+    category: 'Bakery',
+    price: 80,
+    is_available: true,
+    icon: '🥐',
+    prep_time: '2 min',
+  },
+  {
+    id: 'club-sandwich',
+    name: 'Club Sandwich',
+    description: 'Stacked, hearty, and made for a proper lunch break.',
+    category: 'Food',
+    price: 195,
+    is_available: true,
+    icon: '🥪',
+    prep_time: '10 min',
+  },
+];
+
+export const heroStats = [
+  { label: 'Avg. brew time', value: '6 min' },
+  { label: 'Pickup rating', value: '4.9/5' },
+  { label: 'Order channels', value: 'Supabase' },
+];

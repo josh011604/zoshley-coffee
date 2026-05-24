@@ -1,0 +1,45 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --coffee-950: #110a06;
+  --coffee-900: #1a0f09;
+  --coffee-800: #2b1a11;
+  --coffee-700: #4a3121;
+  --cream-50: #fff7eb;
+  --gold-400: #f5b94c;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(245, 185, 76, 0.16), transparent 28%),
+    radial-gradient(circle at right center, rgba(150, 89, 41, 0.14), transparent 32%),
+    linear-gradient(180deg, #160c07 0%, #0e0704 100%);
+  color: var(--cream-50);
+  font-family: 'Manrope', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(245, 185, 76, 0.35);
+  color: #fff;
+}
+
+code {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
