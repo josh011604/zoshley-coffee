@@ -173,6 +173,7 @@ export default function App() {
   const [orderSuccessOpen, setOrderSuccessOpen] = useState(false);
   const [lastOrderCode, setLastOrderCode] = useState('');
   const [lastOrderFulfillment, setLastOrderFulfillment] = useState<Fulfillment>('pickup');
+  const [whatsNewOpen, setWhatsNewOpen] = useState(true);
 
   useEffect(() => {
     let mounted = true;
@@ -468,6 +469,31 @@ export default function App() {
                 <span className="h-2 w-2 rounded-full bg-gold" />
                 {banner}
               </div>
+
+              {whatsNewOpen && (
+                <div className="mt-4 rounded-lg border border-white/10 bg-black/10 p-4 text-sm text-cream/85">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <strong className="block text-base">What’s new</strong>
+                      <ul className="mt-2 ml-4 list-disc">
+                        <li>Checkout improved: accepts typed address (Enter) and retries if delivery coords are unavailable.</li>
+                        <li>Database migration added: `delivery_lat` and `delivery_lng` now available for orders.</li>
+                        <li>Map autocomplete and preview improved for delivery selection.</li>
+                        <li>CI and deploy configs added for automated builds.</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setWhatsNewOpen(false)}
+                        className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-cream/60"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-6 grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
                 <div>
