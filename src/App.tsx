@@ -388,7 +388,7 @@ export default function App() {
     // If the insert failed due to missing delivery columns, retry without coords
     if (resultError) {
       const msg = String(resultError.message ?? resultError);
-      const missingCoords = /delivery_lat|delivery_lng|Could not find the 'delivery_lat'|Could not find the 'delivery_lng'|column \"delivery_lat\" of relation \"orders\" does not exist/i.test(msg);
+      const missingCoords = /delivery_lat|delivery_lng|Could not find the 'delivery_lat'|Could not find the 'delivery_lng'|column "delivery_lat" of relation "orders" does not exist/i.test(msg);
       if (missingCoords) {
         const { delivery_lat, delivery_lng, ...payloadWithoutCoords } = payload as any;
         try {
