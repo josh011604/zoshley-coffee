@@ -39,8 +39,8 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm">
-      <div className="w-full max-w-4xl overflow-hidden rounded-[2rem] border border-white/10 bg-[#0f0906] p-6 shadow-2xl shadow-black/60">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm overflow-auto">
+      <div className="w-full max-w-4xl max-h-[90vh] overflow-auto rounded-[2rem] border border-white/10 bg-[#0f0906] p-6 shadow-2xl shadow-black/60">
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.28em] text-cream/45">Checkout</p>
