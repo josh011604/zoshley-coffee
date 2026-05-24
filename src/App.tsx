@@ -448,15 +448,7 @@ export default function App() {
                 >
                   {staffButtonLabel}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.location.hash = '/admin';
-                  }}
-                  className="rounded-full border border-white/10 px-3 py-1 text-sm text-cream/70"
-                >
-                  Open admin
-                </button>
+                
               </div>
             </div>
           </div>
