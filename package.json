@@ -2,6 +2,7 @@
   "name": "zoshley-coffee",
   "version": "0.1.0",
   "private": true,
+  "proxy": "http://localhost:4000",
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
     "@testing-library/dom": "^10.4.1",

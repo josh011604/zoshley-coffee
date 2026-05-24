@@ -48,6 +48,15 @@ The app expects these tables:
 - `created_at`
 - `updated_at`
 
+`inventory_items`
+
+- `id`
+- `item_name`
+- `stock`
+- `threshold`
+- `created_at`
+- `updated_at`
+
 ## Scripts
 
 - `npm start`
@@ -64,3 +73,7 @@ REACT_APP_MAPBOX_TOKEN=pk.your_mapbox_token_here
 ```
 
 If you don't set a token the app will use a small demo fallback for address suggestions.
+
+## Admin inventory sync
+
+Inventory stock changes can sync through the local admin API when you run `npm run dev:api` and set `REACT_APP_ADMIN_API_SECRET` in your environment.

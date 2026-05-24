@@ -29,6 +29,7 @@ type OrderRow = {
 };
 
 type InventoryRow = {
+  id: string;
   product: string;
   stock: number;
   threshold: number;
@@ -128,10 +129,31 @@ const sampleCategories: CategoryRow[] = [
 ];
 
 const sampleInventory: InventoryRow[] = [
-  { product: 'Espresso Beans', stock: 12, threshold: 8, lastUpdated: '2026-05-24 08:20' },
-  { product: 'Milk', stock: 18, threshold: 12, lastUpdated: '2026-05-24 07:50' },
-  { product: 'Butter Croissant', stock: 5, threshold: 6, lastUpdated: '2026-05-24 09:15' },
+  { id: '6d0a8e49-0fa4-4a23-9de5-8e4a4a7d0f01', product: 'Espresso Beans', stock: 12, threshold: 8, lastUpdated: '2026-05-24 08:20' },
+  { id: '6d0a8e49-0fa4-4a23-9de5-8e4a4a7d0f02', product: 'Milk', stock: 18, threshold: 12, lastUpdated: '2026-05-24 07:50' },
+  { id: '6d0a8e49-0fa4-4a23-9de5-8e4a4a7d0f03', product: 'Butter Croissant', stock: 5, threshold: 6, lastUpdated: '2026-05-24 09:15' },
 ];
+
+const inventoryStorageKey = 'zoshley-inventory';
+
+const formatInventoryTimestamp = (value?: string | null) => {
+  if (!value) {
+    return new Date().toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : parsed.toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+const createInventoryId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `inventory-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
 
 const sampleStaff: StaffRow[] = [
   { id: 'staff-1', name: 'Rita Bautista', email: 'rita@zoshleycoffee.com', role: 'admin' },
@@ -196,7 +218,26 @@ const AdminDashboard: React.FC = () => {
   const [orders, setOrders] = useState<OrderRow[]>(sampleOrders);
   const [products, setProducts] = useState<MenuItem[]>(sampleProducts);
   const [categories, setCategories] = useState<CategoryRow[]>(sampleCategories);
-  const [inventory, setInventory] = useState<InventoryRow[]>(sampleInventory);
+  const [inventory, setInventory] = useState<InventoryRow[]>(() => {
+    if (typeof window === 'undefined') return sampleInventory;
+    try {
+      const stored = window.localStorage.getItem(inventoryStorageKey);
+      if (!stored) return sampleInventory;
+      const parsed = JSON.parse(stored);
+      if (!Array.isArray(parsed)) return sampleInventory;
+      return parsed
+        .filter((item) => item && item.product)
+        .map((item) => ({
+          id: String(item.id ?? createInventoryId()),
+          product: String(item.product),
+          stock: Number.isFinite(Number(item.stock)) ? Math.max(0, Number(item.stock)) : 0,
+          threshold: Number.isFinite(Number(item.threshold)) ? Math.max(0, Number(item.threshold)) : 0,
+          lastUpdated: String(item.lastUpdated ?? formatInventoryTimestamp()),
+        }));
+    } catch {
+      return sampleInventory;
+    }
+  });
   const [staffList, setStaffList] = useState<StaffRow[]>(sampleStaff);
   const [orderModalOpen, setOrderModalOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderRow | null>(null);
@@ -266,15 +307,80 @@ const AdminDashboard: React.FC = () => {
   };
 
   const addStockLog = () => {
-    setInventory((current) => [
+    void persistInventory((current) => [
       {
+        id: createInventoryId(),
         product: `New Inventory Item ${current.length + 1}`,
         stock: 0,
         threshold: 0,
-        lastUpdated: new Date().toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        lastUpdated: formatInventoryTimestamp(),
       },
       ...current,
     ]);
+  };
+
+  const adjustInventoryStock = (inventoryId: string, delta: number) => {
+    void persistInventory((current) =>
+      current.map((item) =>
+        item.id === inventoryId
+          ? {
+              ...item,
+              stock: Math.max(0, item.stock + delta),
+              lastUpdated: formatInventoryTimestamp(),
+            }
+          : item,
+      ),
+    );
+  };
+
+  const updateInventoryItem = (inventoryId: string, updates: Partial<Pick<InventoryRow, 'product' | 'stock' | 'threshold'>>) => {
+    void persistInventory((current) =>
+      current.map((item) =>
+        item.id === inventoryId
+          ? {
+              ...item,
+              product: updates.product ?? item.product,
+              stock: updates.stock != null ? Math.max(0, updates.stock) : item.stock,
+              threshold: updates.threshold != null ? Math.max(0, updates.threshold) : item.threshold,
+              lastUpdated: formatInventoryTimestamp(),
+            }
+          : item,
+      ),
+    );
+  };
+
+  const persistInventory = async (updater: (current: InventoryRow[]) => InventoryRow[]) => {
+    setInventory((current) => {
+      const nextInventory = updater(current);
+
+      try {
+        window.localStorage.setItem(inventoryStorageKey, JSON.stringify(nextInventory));
+      } catch {
+        // Ignore local storage errors and keep the UI responsive.
+      }
+
+      if (isSupabaseConfigured && supabase && process.env.REACT_APP_ADMIN_API_SECRET) {
+        void fetch('/api/inventory', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-secret': process.env.REACT_APP_ADMIN_API_SECRET,
+          },
+          body: JSON.stringify({
+            inventory: nextInventory.map((item) => ({
+              id: item.id,
+              product: item.product,
+              stock: item.stock,
+              threshold: item.threshold,
+            })),
+          }),
+        }).catch(() => {
+          // Fall back to local persistence.
+        });
+      }
+
+      return nextInventory;
+    });
   };
 
   const editStaff = (staffId: string) => {
@@ -366,6 +472,36 @@ const AdminDashboard: React.FC = () => {
         db.from('menu_items').select('id,name,description,category,price,featured,is_available').limit(12),
         db.from('profiles').select('id,full_name,email,role').limit(20),
       ]);
+
+      if (process.env.REACT_APP_ADMIN_API_SECRET) {
+        try {
+          const inventoryResponse = await fetch('/api/inventory', {
+            headers: {
+              'x-admin-secret': process.env.REACT_APP_ADMIN_API_SECRET,
+            },
+          });
+          if (inventoryResponse.ok) {
+            const inventoryPayload = await inventoryResponse.json();
+            if (Array.isArray(inventoryPayload.items) && inventoryPayload.items.length) {
+              const nextInventory = inventoryPayload.items.map((row: any) => ({
+                id: String(row.id ?? row.item_name ?? createInventoryId()),
+                product: String(row.item_name ?? row.product ?? 'Untitled'),
+                stock: Number(row.stock ?? 0),
+                threshold: Number(row.threshold ?? 0),
+                lastUpdated: formatInventoryTimestamp(row.updated_at),
+              }));
+              setInventory(nextInventory);
+              try {
+                window.localStorage.setItem(inventoryStorageKey, JSON.stringify(nextInventory));
+              } catch {
+                // Ignore local storage errors.
+              }
+            }
+          }
+        } catch {
+          // Keep local inventory if the API is unavailable.
+        }
+      }
 
       if (!ordersResult.error && ordersResult.data?.length) {
         setOrders(
@@ -716,9 +852,48 @@ const AdminDashboard: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-white/10">
                           {inventory.map((item) => (
-                            <tr key={item.product}>
-                              <td className="px-4 py-4 text-cream">{item.product}</td>
-                              <td className="px-4 py-4 text-cream">{item.stock}</td>
+                            <tr key={item.id}>
+                              <td className="px-4 py-4 text-cream">
+                                <input
+                                  value={item.product}
+                                  onChange={(event) => updateInventoryItem(item.id, { product: event.target.value })}
+                                  className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-cream outline-none transition placeholder:text-cream/40 focus:border-gold/60"
+                                  aria-label={`Edit name for ${item.product}`}
+                                />
+                              </td>
+                              <td className="px-4 py-4 text-cream">
+                                <div className="flex items-center gap-3">
+                                  <button
+                                    type="button"
+                                    aria-label={`Decrease stock for ${item.product}`}
+                                    onClick={() => adjustInventoryStock(item.id, -1)}
+                                    className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/30 text-lg font-semibold text-cream transition hover:border-gold/40 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                                    disabled={item.stock <= 0}
+                                  >
+                                    −
+                                  </button>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    step={1}
+                                    value={item.stock}
+                                    onChange={(event) => {
+                                      const nextValue = Number(event.target.value);
+                                      updateInventoryItem(item.id, { stock: Number.isFinite(nextValue) ? nextValue : 0 });
+                                    }}
+                                    className="w-20 rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-center font-semibold text-cream outline-none transition focus:border-gold/60"
+                                    aria-label={`Edit stock for ${item.product}`}
+                                  />
+                                  <button
+                                    type="button"
+                                    aria-label={`Increase stock for ${item.product}`}
+                                    onClick={() => adjustInventoryStock(item.id, 1)}
+                                    className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-black/30 text-lg font-semibold text-cream transition hover:border-gold/40 hover:bg-white/10"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </td>
                               <td className="px-4 py-4 text-cream">{item.threshold}</td>
                               <td className="px-4 py-4 text-cream/70">{item.lastUpdated}</td>
                             </tr>

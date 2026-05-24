@@ -10,8 +10,13 @@ test.describe('Admin + ordering smoke', () => {
     await page.goto(`${BASE}/`);
     await expect(page.getByRole('heading', { name: 'Build your order' })).toBeVisible({ timeout: 15_000 });
 
+    const dismissWhatsNew = page.getByRole('button', { name: /Dismiss/i });
+    if (await dismissWhatsNew.isVisible().catch(() => false)) {
+      await dismissWhatsNew.click();
+    }
+
     // Add first available item
-    await page.getByRole('button', { name: /Add/i }).first().click();
+    await page.getByRole('button', { name: /Add/i }).first().click({ force: true });
 
     // Open checkout
     await page.getByRole('button', { name: /^Checkout$/i }).click({ force: true });
