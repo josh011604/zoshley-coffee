@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { fallbackMenuItems } from './data';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { getCurrentStaffSession, signIn, signOut } from './lib/auth';
+import { menuStorageKey, menuSyncEventName, readMenuCache, writeMenuCache } from './lib/menu';
 import type { ConnectionState, Fulfillment, MenuItem, OrderFormState } from './types';
 import CartSidebar from './components/CartSidebar';
 import CheckoutModal from './components/CheckoutModal';
@@ -158,7 +159,7 @@ const getDeliveryDetails = (address: string, lat?: number | null, lng?: number |
 };
 
 export default function App() {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(fallbackMenuItems);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>(() => readMenuCache() ?? fallbackMenuItems);
   const [category, setCategory] = useState('All');
   const [connectionState, setConnectionState] = useState<ConnectionState>('loading');
   const [banner, setBanner] = useState('Checking live menu source...');
@@ -179,7 +180,7 @@ export default function App() {
     let mounted = true;
 
     const loadMenu = async () => {
-        if (!supabase) {
+      if (!supabase) {
         if (mounted) {
           setConnectionState('demo');
           setBanner('Menu is running locally. Live menu will appear when configured.');
@@ -201,7 +202,9 @@ export default function App() {
         return;
       }
 
-      setMenuItems((data as any[]).map((row) => normalizeMenuItem(row)));
+      const nextMenu = (data as any[]).map((row) => normalizeMenuItem(row));
+      setMenuItems(nextMenu);
+      writeMenuCache(nextMenu);
       setConnectionState('connected');
       setBanner('Live menu loaded from Supabase.');
     };
@@ -210,6 +213,29 @@ export default function App() {
 
     return () => {
       mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncFromCache = () => {
+      const cachedMenu = readMenuCache();
+      if (cachedMenu !== null) {
+        setMenuItems(cachedMenu);
+      }
+    };
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === menuStorageKey) {
+        syncFromCache();
+      }
+    };
+
+    window.addEventListener(menuSyncEventName, syncFromCache);
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      window.removeEventListener(menuSyncEventName, syncFromCache);
+      window.removeEventListener('storage', onStorage);
     };
   }, []);
 

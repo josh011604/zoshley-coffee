@@ -2,6 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const createStaffHandler = require('./api/create-staff');
 const inventoryHandler = require('./api/inventory');
+const menuItemsHandler = require('./api/menu-items');
 
 const app = express();
 app.use(bodyParser.json());
@@ -13,6 +14,10 @@ app.post('/api/create-staff', (req, res) => {
 
 app.all('/api/inventory', (req, res) => {
   return inventoryHandler(req, res);
+});
+
+app.all('/api/menu-items', (req, res) => {
+  return menuItemsHandler(req, res);
 });
 
 const port = process.env.DEV_API_PORT || 4000;

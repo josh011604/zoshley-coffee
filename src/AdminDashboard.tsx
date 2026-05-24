@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { signIn, signOut, getCurrentStaffSession, StaffSession as AuthStaffSession } from './lib/auth';
+import { emitMenuSync, readMenuCache, writeMenuCache } from './lib/menu';
 import type { MenuItem } from './types';
 import AdminLoginPanel from './components/AdminLoginPanel';
 
@@ -216,7 +217,7 @@ const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [orders, setOrders] = useState<OrderRow[]>(sampleOrders);
-  const [products, setProducts] = useState<MenuItem[]>(sampleProducts);
+  const [products, setProducts] = useState<MenuItem[]>(() => readMenuCache() ?? sampleProducts);
   const [categories, setCategories] = useState<CategoryRow[]>(sampleCategories);
   const [inventory, setInventory] = useState<InventoryRow[]>(() => {
     if (typeof window === 'undefined') return sampleInventory;
@@ -255,9 +256,45 @@ const AdminDashboard: React.FC = () => {
     [orders],
   );
 
+  const persistProducts = async (updater: (current: MenuItem[]) => MenuItem[]) => {
+    setProducts((current) => {
+      const nextProducts = updater(current);
+
+      writeMenuCache(nextProducts);
+      emitMenuSync();
+
+      if (isSupabaseConfigured && supabase && process.env.REACT_APP_ADMIN_API_SECRET) {
+        void fetch('/api/menu-items', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-secret': process.env.REACT_APP_ADMIN_API_SECRET,
+          },
+          body: JSON.stringify({
+            products: nextProducts.map((item) => ({
+              id: item.id,
+              name: item.name,
+              description: item.description,
+              category: item.category,
+              price: item.price,
+              featured: Boolean(item.featured),
+              is_available: item.is_available ?? true,
+              image_url: item.icon ?? null,
+              prep_time: item.prep_time ?? null,
+            })),
+          }),
+        }).catch(() => {
+          // Keep the local edit even if the API is unavailable.
+        });
+      }
+
+      return nextProducts;
+    });
+  };
+
   const addProduct = () => {
     const nextIndex = products.length + 1;
-    setProducts((current) => [
+    void persistProducts((current) => [
       {
         id: `product-${Date.now()}`,
         name: `New Product ${nextIndex}`,
@@ -287,7 +324,7 @@ const AdminDashboard: React.FC = () => {
   };
 
   const deleteProduct = (productId: string) => {
-    setProducts((current) => current.filter((product) => product.id !== productId));
+    void persistProducts((current) => current.filter((product) => product.id !== productId));
   };
 
   const addCategory = () => {
@@ -400,7 +437,7 @@ const AdminDashboard: React.FC = () => {
 
     if (editModal.kind === 'product') {
       const price = Number(editModal.price);
-      setProducts((current) =>
+      void persistProducts((current) =>
         current.map((product) =>
           product.id === editModal.id
             ? {
@@ -520,8 +557,7 @@ const AdminDashboard: React.FC = () => {
       }
 
       if (!productsResult.error && productsResult.data?.length) {
-        setProducts(
-          productsResult.data.map((item) => ({
+        const nextProducts = productsResult.data.map((item) => ({
             id: String(item.id),
             name: item.name ?? 'Untitled',
             description: item.description ?? '',
@@ -529,8 +565,9 @@ const AdminDashboard: React.FC = () => {
             price: Number(item.price ?? 0),
             featured: Boolean(item.featured),
             is_available: item.is_available ?? true,
-          })),
-        );
+          }));
+        setProducts(nextProducts);
+        writeMenuCache(nextProducts);
       }
 
       if (!profilesResult.error && profilesResult.data?.length) {
