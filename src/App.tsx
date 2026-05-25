@@ -78,11 +78,16 @@ const readCheckoutDraft = (): CheckoutDraft | null => {
     const parsed = JSON.parse(stored) as Partial<CheckoutDraft>;
     if (!parsed || typeof parsed !== 'object') return null;
 
-    const cart = parsed.cart && typeof parsed.cart === 'object' ? Object.fromEntries(
-      Object.entries(parsed.cart)
-        .map(([id, quantity]) => [String(id), Math.max(0, Number(quantity) || 0)])
-        .filter(([, quantity]) => quantity > 0),
-    ) : {};
+    const cartEntries = parsed.cart && typeof parsed.cart === 'object'
+      ? Object.entries(parsed.cart)
+          .map(([id, quantity]) => {
+            const normalizedQuantity = Math.max(0, Number(quantity) || 0);
+            return [String(id), normalizedQuantity] as const;
+          })
+          .filter(([, quantity]) => quantity > 0)
+      : [];
+
+    const cart = Object.fromEntries(cartEntries);
 
     const orderForm: OrderFormState = parsed.orderForm && typeof parsed.orderForm === 'object'
       ? {
