@@ -151,6 +151,15 @@ const getDeliveryDetails = (address: string, lat?: number | null, lng?: number |
     };
   }
 
+  if (normalized.includes('tinibgan')) {
+    return {
+      zone: 'Tinibgan delivery route',
+      fee: 70,
+      eta: '45–55 min',
+      note: 'Covered by the inland barangay delivery route.',
+    };
+  }
+
   return {
     zone: 'Nearby service area',
     fee: 80,
@@ -176,6 +185,7 @@ export default function App() {
   const [orderSuccessOpen, setOrderSuccessOpen] = useState(false);
   const [lastOrderCode, setLastOrderCode] = useState('');
   const [lastOrderFulfillment, setLastOrderFulfillment] = useState<Fulfillment>('pickup');
+  const [lastOrderDeliveryAddress, setLastOrderDeliveryAddress] = useState('');
   const [whatsNewOpen, setWhatsNewOpen] = useState(true);
 
   const mergeMenuItems = (cachedItems: MenuItem[], remoteItems: MenuItem[]) => {
@@ -321,12 +331,13 @@ export default function App() {
 
   const createOrderCode = () => `ORD-${Date.now().toString().slice(-6)}`;
 
-  const formatEstimatedDelivery = (fulfillment: Fulfillment = orderForm.fulfillment) => {
+  const formatEstimatedDelivery = (fulfillment: Fulfillment = lastOrderFulfillment, address: string = lastOrderDeliveryAddress) => {
     if (fulfillment === 'delivery') {
-      const address = orderForm.deliveryAddress.trim().toLowerCase();
-      if (!address) return 'Estimate available after address is entered.';
-      if (address.includes('makati') || address.includes('taguig') || address.includes('bonifacio') || address.includes('bgc')) return '45–55 min';
-      if (address.includes('quezon') || address.includes('diliman') || address.includes('up') || address.includes('katipunan') || address.includes('san juan')) return '30–40 min';
+      const normalized = address.trim().toLowerCase();
+      if (!normalized) return 'Estimate available after address is entered.';
+      if (normalized.includes('makati') || normalized.includes('taguig') || normalized.includes('bonifacio') || normalized.includes('bgc')) return '45–55 min';
+      if (normalized.includes('quezon') || normalized.includes('diliman') || normalized.includes('up') || normalized.includes('katipunan') || normalized.includes('san juan')) return '30–40 min';
+      if (normalized.includes('tinibgan')) return '45–55 min';
       return '40–50 min';
     }
     return 'Ready in 10 min';
@@ -463,6 +474,7 @@ export default function App() {
     setCart({});
     setLastOrderCode(createOrderCode());
     setLastOrderFulfillment(orderForm.fulfillment);
+    setLastOrderDeliveryAddress(orderForm.deliveryAddress);
     setOrderSuccessOpen(true);
     setOrderForm(initialOrderForm);
     setBanner('Order saved to Supabase.');
