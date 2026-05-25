@@ -59,6 +59,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <input
                   value={orderForm.name}
                   onChange={(event) => onUpdateForm('name', event.target.value)}
+                  aria-label="Customer name"
                   className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition placeholder:text-cream/40 focus:border-gold/60"
                   placeholder="Anna Santos"
                 />
@@ -68,6 +69,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <input
                   value={orderForm.phone}
                   onChange={(event) => onUpdateForm('phone', event.target.value)}
+                  aria-label="Phone"
                   className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition placeholder:text-cream/40 focus:border-gold/60"
                   placeholder="0917 123 4567"
                 />
@@ -79,6 +81,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <input
                 value={orderForm.email}
                 onChange={(event) => onUpdateForm('email', event.target.value)}
+                aria-label="Email"
                 className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition placeholder:text-cream/40 focus:border-gold/60"
                 placeholder="anna@example.com"
                 type="email"
@@ -90,6 +93,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <select
                 value={orderForm.fulfillment}
                 onChange={(event) => onUpdateForm('fulfillment', event.target.value as any)}
+                aria-label="Fulfillment"
                 className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition focus:border-gold/60"
               >
                 <option value="pickup">Pickup</option>
@@ -122,6 +126,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <select
                 value={orderForm.paymentMethod}
                 onChange={(event) => onUpdateForm('paymentMethod', event.target.value as PaymentMethod)}
+                aria-label="Payment method"
                 className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition focus:border-gold/60"
               >
                 {paymentOptions.map((method) => (
@@ -135,6 +140,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <textarea
                 value={orderForm.notes}
                 onChange={(event) => onUpdateForm('notes', event.target.value)}
+                aria-label="Special requests"
                 rows={4}
                 className="w-full rounded-2xl border border-white/10 bg-black/10 px-4 py-3 text-cream outline-none transition placeholder:text-cream/40 focus:border-gold/60"
                 placeholder="Add any notes or allergy details"
