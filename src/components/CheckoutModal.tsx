@@ -38,6 +38,16 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  const computedCanSubmit =
+    canSubmit ||
+    Boolean(
+      orderForm.name.trim() &&
+        orderForm.phone.trim() &&
+        cartItems.length > 0 &&
+        !submitting &&
+        (orderForm.fulfillment === 'pickup' || orderForm.deliveryAddress.trim()),
+    );
+
   return (
     <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/70 px-4 py-8 backdrop-blur-sm overflow-auto">
       <div className="w-full max-w-4xl max-h-[90vh] overflow-auto rounded-[2rem] border border-white/10 bg-[#0f0906] p-6 shadow-2xl shadow-black/60">
@@ -187,7 +197,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <button
               type="button"
               onClick={onSubmit}
-              disabled={!canSubmit || submitting}
+              disabled={cartItems.length === 0 || submitting}
               className="mt-5 w-full rounded-full bg-gradient-to-r from-gold via-amber-500 to-ember px-5 py-4 text-sm font-bold uppercase tracking-[0.2em] text-coffee-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? 'Placing order…' : 'Confirm order'}
