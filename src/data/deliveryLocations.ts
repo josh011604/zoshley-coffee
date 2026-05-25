@@ -1,6 +1,53 @@
 import type { SuggestionGroup } from '../components/MapAutocompleteTypes';
-import data from './deliveryLocations.json';
 
-const demoSuggestions: SuggestionGroup[] = data as SuggestionGroup[];
+const demoSuggestions: SuggestionGroup[] = [
+	{
+		label: 'Town Proper & Coastal Hubs',
+		items: [
+			{ id: 'poblacion', place_name: 'Poblacion (Center)' },
+			{ id: 'santa-cruz', place_name: 'Santa Cruz (Commercial Hub)' },
+			{ id: 'san-roque', place_name: 'San Roque' },
+			{ id: 'desamparados', place_name: 'Desamparados' },
+			{ id: 'calunasan', place_name: 'Calunasan' },
+		],
+	},
+	{
+		label: 'Pangangan Island (Connected by Causeway)',
+		items: [
+			{ id: 'libaong', place_name: 'Libaong' },
+			{ id: 'looc', place_name: 'Looc' },
+			{ id: 'lomboy', place_name: 'Lomboy' },
+			{ id: 'magtongtong', place_name: 'Magtongtong' },
+			{ id: 'talisay', place_name: 'Talisay' },
+			{ id: 'kinangan', place_name: 'Kinangan' },
+			{ id: 'kahayag', place_name: 'Kahayag' },
+			{ id: 'lawis', place_name: 'Lawis' },
+		],
+	},
+	{
+		label: 'Inland & Upland Barangays',
+		items: [
+			{ id: 'abucayan-norte', place_name: 'Abucayan Norte' },
+			{ id: 'abucayan-sur', place_name: 'Abucayan Sur' },
+			{ id: 'binasbas', place_name: 'Binasbas' },
+			{ id: 'bonbon', place_name: 'Bonbon' },
+			{ id: 'cabayugan', place_name: 'Cabayugan' },
+			{ id: 'cabudlan', place_name: 'Cabudlan' },
+			{ id: 'calinginan-norte', place_name: 'Calinginan Norte' },
+			{ id: 'calinginan-sur', place_name: 'Calinginan Sur' },
+			{ id: 'catmonan', place_name: 'Catmonan' },
+			{ id: 'centinela', place_name: 'Centinela' },
+			{ id: 'labuon', place_name: 'Labuon' },
+			{ id: 'lucob', place_name: 'Lucob' },
+			{ id: 'madangog', place_name: 'Madangog' },
+			{ id: 'maguicay', place_name: 'Maguicay' },
+			{ id: 'mahayag', place_name: 'Mahayag' },
+			{ id: 'mantatao', place_name: 'Mantatao' },
+			{ id: 'sampoangon', place_name: 'Sampoangon' },
+			{ id: 'tultugan', place_name: 'Tultugan' },
+			{ id: 'tinibgan', place_name: 'Tinibgan' },
+		],
+	},
+];
 
 export default demoSuggestions;
