@@ -354,42 +354,6 @@ const AdminDashboard: React.FC = () => {
     });
   };
 
-  const persistCategories = async (updater: (current: CategoryRow[]) => CategoryRow[]) => {
-    setSyncStatus({ label: 'Saving categories', state: 'saving' });
-    setCategories((current) => {
-      const nextCategories = updater(current);
-
-      writeCategoryCache(nextCategories);
-      emitCategorySync();
-
-      void (async () => {
-        try {
-          const response = await fetch('/api/categories', {
-            method: 'POST',
-            headers: await getAdminApiHeaders(),
-            body: JSON.stringify({
-              categories: nextCategories.map((item) => ({
-                id: item.id,
-                name: item.name,
-                parent: item.parent ?? null,
-              })),
-            }),
-          });
-
-          if (!response.ok) {
-            throw new Error(await response.text());
-          }
-        } catch {
-          // Keep the local edit even if the server sync is unavailable.
-        }
-      })();
-
-      setSyncStatus({ label: 'Categories saved', state: 'saved' });
-
-      return nextCategories;
-    });
-  };
-
   const addProduct = () => {
     const nextIndex = products.length + 1;
     void persistProducts((current) => [
@@ -618,12 +582,24 @@ const AdminDashboard: React.FC = () => {
     const db = supabase;
 
     const loadData = async () => {
-      const [ordersResult, productsResult, categoriesResult, profilesResult] = await Promise.all([
-        db.from('orders').select('id,customer_name,customer_phone,fulfillment,status,total,created_at,delivery_lat,delivery_lng').order('created_at', { ascending: false }).limit(8),
-        db.from('menu_items').select('id,name,description,category,price,featured,is_available').limit(12),
-        db.from('categories').select('id,name,parent').order('name', { ascending: true }).limit(50),
-        db.from('profiles').select('id,full_name,email,role').limit(20),
-      ]);
+      const ordersResponse = await db
+        .from('orders')
+        .select('id,customer_name,customer_phone,fulfillment,status,total,created_at,delivery_lat,delivery_lng')
+        .order('created_at', { ascending: false })
+        .limit(8);
+
+      const productsResponse = await db
+        .from('menu_items')
+        .select('id,name,description,category,price,featured,is_available')
+        .limit(12);
+
+      const categoriesResponse = await db
+        .from('categories')
+        .select('id,name,parent')
+        .order('name', { ascending: true })
+        .limit(50);
+
+      const profilesResponse = await db.from('profiles').select('id,full_name,email,role').limit(20);
 
       if (process.env.REACT_APP_ADMIN_API_SECRET) {
         try {
@@ -656,9 +632,9 @@ const AdminDashboard: React.FC = () => {
         }
       }
 
-      if (!ordersResult.error && ordersResult.data?.length) {
+      if (!ordersResponse.error && ordersResponse.data?.length) {
         setOrders(
-          ordersResult.data.map((row: any) => ({
+          ordersResponse.data.map((row: any) => ({
             id: String(row.id),
             customer_name: row.customer_name ?? 'Guest',
             customer_phone: row.customer_phone ?? 'n/a',
@@ -672,25 +648,25 @@ const AdminDashboard: React.FC = () => {
         );
       }
 
-      if (!productsResult.error && productsResult.data?.length) {
-        const remoteProducts = productsResult.data.map((item) => ({
-            id: String(item.id),
-            name: item.name ?? 'Untitled',
-            description: item.description ?? '',
-            category: item.category ?? 'Uncategorized',
-            price: Number(item.price ?? 0),
-            featured: Boolean(item.featured),
-            is_available: item.is_available ?? true,
-          }));
+      if (!productsResponse.error && productsResponse.data?.length) {
+        const remoteProducts = productsResponse.data.map((item: any) => ({
+          id: String(item.id),
+          name: item.name ?? 'Untitled',
+          description: item.description ?? '',
+          category: item.category ?? 'Uncategorized',
+          price: Number(item.price ?? 0),
+          featured: Boolean(item.featured),
+          is_available: item.is_available ?? true,
+        }));
         const cachedProducts = readMenuCache() ?? [];
         const nextProducts = mergeProductsById(cachedProducts, remoteProducts);
         setProducts(nextProducts);
         writeMenuCache(nextProducts);
-          setSyncStatus({ label: 'Products loaded', state: 'saved' });
+        setSyncStatus({ label: 'Products loaded', state: 'saved' });
       }
 
-      if (!categoriesResult.error && categoriesResult.data?.length) {
-        const remoteCategories = categoriesResult.data.map((item) => ({
+      if (!categoriesResponse.error && categoriesResponse.data?.length) {
+        const remoteCategories = (categoriesResponse.data as Array<{ id: string; name?: string | null; parent?: string | null }>).map((item) => ({
           id: String(item.id),
           name: item.name ?? 'Untitled Category',
           parent: item.parent ? String(item.parent) : undefined,
@@ -701,9 +677,10 @@ const AdminDashboard: React.FC = () => {
         writeCategoryCache(nextCategories);
       }
 
-      if (!profilesResult.error && profilesResult.data?.length) {
+      if (!profilesResponse.error && profilesResponse.data?.length) {
+        const profileRows = profilesResponse.data as ProfileRow[];
         setStaffList(
-          profilesResult.data
+          profileRows
             .filter((profile) => profile.role === 'admin' || profile.role === 'staff')
             .map((profile) => ({
               id: String(profile.id),

@@ -89,19 +89,19 @@ const readCheckoutDraft = (): CheckoutDraft | null => {
 
     const cart = Object.fromEntries(cartEntries);
 
-    const orderForm: OrderFormState = parsed.orderForm && typeof parsed.orderForm === 'object'
+    const parsedOrderForm = parsed.orderForm && typeof parsed.orderForm === 'object' ? parsed.orderForm : null;
+    const orderForm: OrderFormState = parsedOrderForm
       ? {
           ...initialOrderForm,
-          ...parsed.orderForm,
-          name: String(parsed.orderForm.name ?? ''),
-          phone: String(parsed.orderForm.phone ?? ''),
-          email: String(parsed.orderForm.email ?? ''),
-          fulfillment: (parsed.orderForm.fulfillment === 'delivery' ? 'delivery' : 'pickup') as Fulfillment,
-          deliveryAddress: String(parsed.orderForm.deliveryAddress ?? ''),
-          deliveryLat: parsed.orderForm.deliveryLat ?? null,
-          deliveryLng: parsed.orderForm.deliveryLng ?? null,
-          paymentMethod: (parsed.orderForm.paymentMethod ?? initialOrderForm.paymentMethod) as OrderFormState['paymentMethod'],
-          notes: String(parsed.orderForm.notes ?? ''),
+          name: String(parsedOrderForm.name ?? ''),
+          phone: String(parsedOrderForm.phone ?? ''),
+          email: String(parsedOrderForm.email ?? ''),
+          fulfillment: parsedOrderForm.fulfillment === 'delivery' ? 'delivery' : 'pickup',
+          deliveryAddress: String(parsedOrderForm.deliveryAddress ?? ''),
+          deliveryLat: parsedOrderForm.deliveryLat ?? null,
+          deliveryLng: parsedOrderForm.deliveryLng ?? null,
+          paymentMethod: (parsedOrderForm.paymentMethod ?? initialOrderForm.paymentMethod) as OrderFormState['paymentMethod'],
+          notes: String(parsedOrderForm.notes ?? ''),
         }
       : initialOrderForm;
 

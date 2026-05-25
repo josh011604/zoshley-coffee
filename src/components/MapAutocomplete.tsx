@@ -41,7 +41,6 @@ const MapAutocomplete: React.FC<Props> = ({ value, onSelect, placeholder }) => {
   const [remoteResults, setRemoteResults] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const token = process.env.REACT_APP_MAPBOX_TOKEN;
-  const localSuggestions = flattenSuggestions();
 
   useEffect(() => {
     setQuery(value || '');
