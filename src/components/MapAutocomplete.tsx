@@ -11,6 +11,29 @@ type Props = {
 
 const flattenSuggestions = () => demoSuggestions.flatMap((group) => group.items);
 
+const getLocalMatches = (query: string) => {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  if (!normalizedQuery) {
+    return {
+      groups: demoSuggestions,
+      items: flattenSuggestions(),
+    };
+  }
+
+  const groups = demoSuggestions
+    .map((group) => ({
+      label: group.label,
+      items: group.items.filter((suggestion) => suggestion.place_name.toLowerCase().includes(normalizedQuery)),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  return {
+    groups: groups.length ? groups : demoSuggestions,
+    items: groups.length ? groups.flatMap((group) => group.items) : flattenSuggestions(),
+  };
+};
+
 const MapAutocomplete: React.FC<Props> = ({ value, onSelect, placeholder }) => {
   const [query, setQuery] = useState(value || '');
   const [results, setResults] = useState<Suggestion[]>([]);
@@ -28,9 +51,10 @@ const MapAutocomplete: React.FC<Props> = ({ value, onSelect, placeholder }) => {
     let mounted = true;
     const fetchSuggestions = async () => {
       if (!query.trim()) {
-        setLocalResults(demoSuggestions);
+        const localMatches = getLocalMatches('');
+        setLocalResults(localMatches.groups);
         setRemoteResults([]);
-        setResults(flattenSuggestions());
+        setResults(localMatches.items);
         return;
       }
 
@@ -42,21 +66,20 @@ const MapAutocomplete: React.FC<Props> = ({ value, onSelect, placeholder }) => {
           const data = await res.json();
           if (!mounted) return;
           const items: Suggestion[] = (data.features || []).map((f: any) => ({ id: f.id, place_name: f.place_name, center: f.center }));
-          const localMatchesGroups = demoSuggestions
-            .map((g) => ({ label: g.label, items: g.items.filter((s) => s.place_name.toLowerCase().includes(query.toLowerCase())) }))
-            .filter((g) => g.items.length > 0);
+          const localMatches = getLocalMatches(query);
           setRemoteResults(items);
-          setLocalResults(localMatchesGroups);
-          setResults([...localMatchesGroups.flatMap((g) => g.items), ...items]);
+          setLocalResults(localMatches.groups);
+          setResults([...localMatches.items, ...items]);
         } else {
-          const groups = demoSuggestions.map((g) => ({ label: g.label, items: g.items.filter((s) => s.place_name.toLowerCase().includes(query.toLowerCase())) })).filter((g) => g.items.length > 0);
-          setLocalResults(groups.length ? groups : demoSuggestions);
+          const localMatches = getLocalMatches(query);
+          setLocalResults(localMatches.groups);
           setRemoteResults([]);
-          setResults((groups.length ? groups.flatMap((g) => g.items) : flattenSuggestions()));
+          setResults(localMatches.items);
         }
       } catch (e) {
-        setResults([]);
-        setLocalResults([]);
+        const localMatches = getLocalMatches(query);
+        setResults(localMatches.items);
+        setLocalResults(localMatches.groups);
         setRemoteResults([]);
       } finally {
         if (mounted) setLoading(false);
