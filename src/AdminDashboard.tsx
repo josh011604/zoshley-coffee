@@ -215,6 +215,20 @@ const orderTimeline = (status: string) => [
   { label: 'Completed', active: status === 'completed' },
 ];
 
+const mergeProductsById = (cachedProducts: MenuItem[], remoteProducts: MenuItem[]) => {
+  const byId = new Map<string, MenuItem>();
+
+  for (const product of remoteProducts) {
+    byId.set(product.id, product);
+  }
+
+  for (const product of cachedProducts) {
+    byId.set(product.id, product);
+  }
+
+  return Array.from(byId.values());
+};
+
 const AdminDashboard: React.FC = () => {
   const [staffSession, setStaffSession] = useState<AuthStaffSession | null>(null);
   const [loginForm, setLoginForm] = useState({ login: '', password: '' });
@@ -584,7 +598,7 @@ const AdminDashboard: React.FC = () => {
       }
 
       if (!productsResult.error && productsResult.data?.length) {
-        const nextProducts = productsResult.data.map((item) => ({
+        const remoteProducts = productsResult.data.map((item) => ({
             id: String(item.id),
             name: item.name ?? 'Untitled',
             description: item.description ?? '',
@@ -593,6 +607,8 @@ const AdminDashboard: React.FC = () => {
             featured: Boolean(item.featured),
             is_available: item.is_available ?? true,
           }));
+        const cachedProducts = readMenuCache() ?? [];
+        const nextProducts = mergeProductsById(cachedProducts, remoteProducts);
         setProducts(nextProducts);
         writeMenuCache(nextProducts);
           setSyncStatus({ label: 'Products loaded', state: 'saved' });
