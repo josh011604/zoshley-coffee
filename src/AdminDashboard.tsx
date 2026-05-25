@@ -51,6 +51,13 @@ type StaffRow = {
   role: StaffRole;
 };
 
+type ProfileRow = {
+  id: string;
+  full_name?: string | null;
+  email?: string | null;
+  role?: StaffRole | null;
+};
+
 type ReviewRow = {
   id: string;
   customer: string;
