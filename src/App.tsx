@@ -61,6 +61,71 @@ const initialStaffLogin = {
   password: '',
 };
 
+type CheckoutDraft = {
+  cart: Record<string, number>;
+  orderForm: OrderFormState;
+};
+
+const checkoutDraftStorageKey = 'zoshley-checkout-draft';
+
+const readCheckoutDraft = (): CheckoutDraft | null => {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const stored = window.localStorage.getItem(checkoutDraftStorageKey);
+    if (!stored) return null;
+
+    const parsed = JSON.parse(stored) as Partial<CheckoutDraft>;
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    const cart = parsed.cart && typeof parsed.cart === 'object' ? Object.fromEntries(
+      Object.entries(parsed.cart)
+        .map(([id, quantity]) => [String(id), Math.max(0, Number(quantity) || 0)])
+        .filter(([, quantity]) => quantity > 0),
+    ) : {};
+
+    const orderForm: OrderFormState = parsed.orderForm && typeof parsed.orderForm === 'object'
+      ? {
+          ...initialOrderForm,
+          ...parsed.orderForm,
+          name: String(parsed.orderForm.name ?? ''),
+          phone: String(parsed.orderForm.phone ?? ''),
+          email: String(parsed.orderForm.email ?? ''),
+          fulfillment: (parsed.orderForm.fulfillment === 'delivery' ? 'delivery' : 'pickup') as Fulfillment,
+          deliveryAddress: String(parsed.orderForm.deliveryAddress ?? ''),
+          deliveryLat: parsed.orderForm.deliveryLat ?? null,
+          deliveryLng: parsed.orderForm.deliveryLng ?? null,
+          paymentMethod: (parsed.orderForm.paymentMethod ?? initialOrderForm.paymentMethod) as OrderFormState['paymentMethod'],
+          notes: String(parsed.orderForm.notes ?? ''),
+        }
+      : initialOrderForm;
+
+    return { cart, orderForm };
+  } catch {
+    return null;
+  }
+};
+
+const writeCheckoutDraft = (draft: CheckoutDraft) => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(checkoutDraftStorageKey, JSON.stringify(draft));
+  } catch {
+    // Ignore storage failures and keep the UI responsive.
+  }
+};
+
+const clearCheckoutDraft = () => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.removeItem(checkoutDraftStorageKey);
+  } catch {
+    // Ignore storage failures and keep the UI responsive.
+  }
+};
+
 const categoryOrder = ['All', 'Espresso', 'Milk Drinks', 'Cold Brew', 'Bakery', 'Food'];
 
 const formatCurrency = (amount: number) =>
@@ -188,8 +253,8 @@ export default function App() {
   const [category, setCategory] = useState('All');
   const [connectionState, setConnectionState] = useState<ConnectionState>('loading');
   const [banner, setBanner] = useState('Checking live menu source...');
-  const [orderForm, setOrderForm] = useState<OrderFormState>(initialOrderForm);
-  const [cart, setCart] = useState<Record<string, number>>({});
+  const [orderForm, setOrderForm] = useState<OrderFormState>(() => readCheckoutDraft()?.orderForm ?? initialOrderForm);
+  const [cart, setCart] = useState<Record<string, number>>(() => readCheckoutDraft()?.cart ?? {});
   const [submitting, setSubmitting] = useState(false);
   const [staffSession, setStaffSession] = useState<StaffSession | null>(null);
   const [staffLoginOpen, setStaffLoginOpen] = useState(false);
@@ -317,6 +382,10 @@ export default function App() {
       window.removeEventListener('storage', onStorage);
     };
   }, []);
+
+  useEffect(() => {
+    writeCheckoutDraft({ cart, orderForm });
+  }, [cart, orderForm]);
 
   const categories = useMemo(() => {
     const dynamicCategories = Array.from(new Set([...menuItems.map((item) => item.category), ...cachedCategories.map((item) => item.name)]));
@@ -518,6 +587,7 @@ export default function App() {
     setLastOrderDeliveryAddress(orderForm.deliveryAddress);
     setOrderSuccessOpen(true);
     setOrderForm(initialOrderForm);
+    clearCheckoutDraft();
     setBanner('Order saved to Supabase.');
     setSubmitting(false);
     closeCheckout();
