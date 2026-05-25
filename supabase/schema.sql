@@ -27,6 +27,14 @@ create table if not exists public.menu_items (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.categories (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  parent text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
   customer_name text not null,
@@ -46,6 +54,7 @@ create table if not exists public.orders (
 
 create index if not exists menu_items_category_idx on public.menu_items (category);
 create index if not exists menu_items_featured_idx on public.menu_items (featured);
+create index if not exists categories_name_idx on public.categories (name);
 create index if not exists orders_status_idx on public.orders (status);
 create index if not exists orders_created_at_idx on public.orders (created_at desc);
 
@@ -61,7 +70,14 @@ before update on public.orders
 for each row
 execute function public.set_updated_at();
 
+drop trigger if exists set_categories_updated_at on public.categories;
+create trigger set_categories_updated_at
+before update on public.categories
+for each row
+execute function public.set_updated_at();
+
 alter table public.menu_items enable row level security;
+alter table public.categories enable row level security;
 alter table public.orders enable row level security;
 
 -- Public read access for menu items.
@@ -85,6 +101,12 @@ create policy "Anyone can read orders"
   for select
   using (true);
 
+drop policy if exists "Anyone can read categories" on public.categories;
+create policy "Anyone can read categories"
+  on public.categories
+  for select
+  using (true);
+
 -- Optional admin/service role access for menu items and orders.
 drop policy if exists "Service role can manage menu items" on public.menu_items;
 create policy "Service role can manage menu items"
@@ -96,6 +118,13 @@ create policy "Service role can manage menu items"
 drop policy if exists "Service role can manage orders" on public.orders;
 create policy "Service role can manage orders"
   on public.orders
+  for all
+  using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');
+
+drop policy if exists "Service role can manage categories" on public.categories;
+create policy "Service role can manage categories"
+  on public.categories
   for all
   using (auth.role() = 'service_role')
   with check (auth.role() = 'service_role');
@@ -116,4 +145,20 @@ where not exists (
   from public.menu_items m
   where m.name = v.name
     and m.category = v.category
+);
+
+insert into public.categories (name, parent)
+select v.name, v.parent
+from (
+  values
+    ('Espresso', null),
+    ('Milk Drinks', null),
+    ('Bakery', null),
+    ('Food', null),
+    ('Cold Brew', null)
+) as v(name, parent)
+where not exists (
+  select 1
+  from public.categories c
+  where c.name = v.name
 );

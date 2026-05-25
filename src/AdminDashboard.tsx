@@ -229,6 +229,20 @@ const mergeProductsById = (cachedProducts: MenuItem[], remoteProducts: MenuItem[
   return Array.from(byId.values());
 };
 
+const mergeCategoriesById = (cachedCategories: CategoryRow[], remoteCategories: CategoryRow[]) => {
+  const byId = new Map<string, CategoryRow>();
+
+  for (const category of remoteCategories) {
+    byId.set(category.id, category);
+  }
+
+  for (const category of cachedCategories) {
+    byId.set(category.id, category);
+  }
+
+  return Array.from(byId.values());
+};
+
 const AdminDashboard: React.FC = () => {
   const [staffSession, setStaffSession] = useState<AuthStaffSession | null>(null);
   const [loginForm, setLoginForm] = useState({ login: '', password: '' });
@@ -268,6 +282,27 @@ const AdminDashboard: React.FC = () => {
   const [editModal, setEditModal] = useState<EditModalState>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ label: 'Ready to save', state: 'idle' });
 
+  const getAdminApiHeaders = async () => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const secret = process.env.REACT_APP_ADMIN_API_SECRET;
+
+    if (secret) {
+      headers['x-admin-secret'] = secret;
+    }
+
+    if (!supabase) {
+      return headers;
+    }
+
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    return headers;
+  };
+
   const overview = useMemo(
     () => ({
       ordersToday: orders.filter((order) => new Date(order.created_at).toDateString() === new Date().toDateString()).length,
@@ -285,34 +320,73 @@ const AdminDashboard: React.FC = () => {
       writeMenuCache(nextProducts);
       emitMenuSync();
 
-      if (isSupabaseConfigured && supabase && process.env.REACT_APP_ADMIN_API_SECRET) {
-        void fetch('/api/menu-items', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-admin-secret': process.env.REACT_APP_ADMIN_API_SECRET,
-          },
-          body: JSON.stringify({
-            products: nextProducts.map((item) => ({
-              id: item.id,
-              name: item.name,
-              description: item.description,
-              category: item.category,
-              price: item.price,
-              featured: Boolean(item.featured),
-              is_available: item.is_available ?? true,
-              image_url: item.icon ?? null,
-              prep_time: item.prep_time ?? null,
-            })),
-          }),
-        }).catch(() => {
-          // Keep the local edit even if the API is unavailable.
-        });
-      }
+      void (async () => {
+        try {
+          const response = await fetch('/api/menu-items', {
+            method: 'POST',
+            headers: await getAdminApiHeaders(),
+            body: JSON.stringify({
+              products: nextProducts.map((item) => ({
+                id: item.id,
+                name: item.name,
+                description: item.description,
+                category: item.category,
+                price: item.price,
+                featured: Boolean(item.featured),
+                is_available: item.is_available ?? true,
+                image_url: item.icon ?? null,
+                prep_time: item.prep_time ?? null,
+              })),
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(await response.text());
+          }
+        } catch {
+          // Keep the local edit even if the server sync is unavailable.
+        }
+      })();
 
       setSyncStatus({ label: 'Products saved', state: 'saved' });
 
       return nextProducts;
+    });
+  };
+
+  const persistCategories = async (updater: (current: CategoryRow[]) => CategoryRow[]) => {
+    setSyncStatus({ label: 'Saving categories', state: 'saving' });
+    setCategories((current) => {
+      const nextCategories = updater(current);
+
+      writeCategoryCache(nextCategories);
+      emitCategorySync();
+
+      void (async () => {
+        try {
+          const response = await fetch('/api/categories', {
+            method: 'POST',
+            headers: await getAdminApiHeaders(),
+            body: JSON.stringify({
+              categories: nextCategories.map((item) => ({
+                id: item.id,
+                name: item.name,
+                parent: item.parent ?? null,
+              })),
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(await response.text());
+          }
+        } catch {
+          // Keep the local edit even if the server sync is unavailable.
+        }
+      })();
+
+      setSyncStatus({ label: 'Categories saved', state: 'saved' });
+
+      return nextCategories;
     });
   };
 
@@ -544,9 +618,10 @@ const AdminDashboard: React.FC = () => {
     const db = supabase;
 
     const loadData = async () => {
-      const [ordersResult, productsResult, profilesResult] = await Promise.all([
+      const [ordersResult, productsResult, categoriesResult, profilesResult] = await Promise.all([
         db.from('orders').select('id,customer_name,customer_phone,fulfillment,status,total,created_at,delivery_lat,delivery_lng').order('created_at', { ascending: false }).limit(8),
         db.from('menu_items').select('id,name,description,category,price,featured,is_available').limit(12),
+        db.from('categories').select('id,name,parent').order('name', { ascending: true }).limit(50),
         db.from('profiles').select('id,full_name,email,role').limit(20),
       ]);
 
@@ -614,6 +689,18 @@ const AdminDashboard: React.FC = () => {
           setSyncStatus({ label: 'Products loaded', state: 'saved' });
       }
 
+      if (!categoriesResult.error && categoriesResult.data?.length) {
+        const remoteCategories = categoriesResult.data.map((item) => ({
+          id: String(item.id),
+          name: item.name ?? 'Untitled Category',
+          parent: item.parent ? String(item.parent) : undefined,
+        }));
+        const cachedCategories = readCategoryCache() ?? [];
+        const nextCategories = mergeCategoriesById(cachedCategories, remoteCategories);
+        setCategories(nextCategories);
+        writeCategoryCache(nextCategories);
+      }
+
       if (!profilesResult.error && profilesResult.data?.length) {
         setStaffList(
           profilesResult.data
@@ -631,9 +718,9 @@ const AdminDashboard: React.FC = () => {
     void loadData();
   }, []);
 
-      if (categories.length) {
-        writeCategoryCache(categories);
-      }
+  useEffect(() => {
+    writeCategoryCache(categories);
+  }, [categories]);
 
   const submitLogin = async () => {
     setError('');

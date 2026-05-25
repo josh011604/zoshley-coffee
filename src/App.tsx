@@ -3,7 +3,7 @@ import { fallbackMenuItems } from './data';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { getCurrentStaffSession, signIn, signOut } from './lib/auth';
 import { menuStorageKey, menuSyncEventName, readMenuCache, writeMenuCache } from './lib/menu';
-import { categoryStorageKey, categorySyncEventName, readCategoryCache } from './lib/categories';
+import { categoryStorageKey, categorySyncEventName, readCategoryCache, writeCategoryCache, type CachedCategory } from './lib/categories';
 import type { ConnectionState, Fulfillment, MenuItem, OrderFormState } from './types';
 import CartSidebar from './components/CartSidebar';
 import CheckoutModal from './components/CheckoutModal';
@@ -85,6 +85,20 @@ const normalizeMenuItem = (row: Partial<MenuItem> & { id: string }): MenuItem =>
   icon: row.icon,
   prep_time: row.prep_time,
 });
+
+const mergeCategoriesById = (cachedCategories: CachedCategory[], remoteCategories: CachedCategory[]) => {
+  const byId = new Map<string, CachedCategory>();
+
+  for (const category of remoteCategories) {
+    byId.set(category.id, category);
+  }
+
+  for (const category of cachedCategories) {
+    byId.set(category.id, category);
+  }
+
+  return Array.from(byId.values());
+};
 
 const getDeliveryDetails = (address: string, lat?: number | null, lng?: number | null) => {
   const normalized = address.trim().toLowerCase();
@@ -238,6 +252,33 @@ export default function App() {
     };
 
     void loadMenu();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadCategories = async () => {
+      if (!supabase) return;
+
+      const { data, error } = await supabase.from('categories').select('id,name,parent').order('name', { ascending: true });
+      if (!mounted || error || !data?.length) return;
+
+      const remoteCategories = data.map((item) => ({
+        id: String(item.id),
+        name: String(item.name ?? 'Untitled Category'),
+        parent: item.parent ? String(item.parent) : undefined,
+      }));
+      const cached = readCategoryCache() ?? [];
+      const nextCategories = mergeCategoriesById(cached, remoteCategories);
+      setCachedCategories(nextCategories);
+      writeCategoryCache(nextCategories);
+    };
+
+    void loadCategories();
 
     return () => {
       mounted = false;

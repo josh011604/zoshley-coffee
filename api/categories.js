@@ -16,7 +16,7 @@ const getBearerToken = (req) => {
   return match ? match[1].trim() : null;
 };
 
-const isAuthorized = async (req, supabase) => {
+const authorize = async (req, supabase) => {
   const adminSecret = getSecret();
   const incoming = req.headers['x-admin-secret'] || req.headers['x-admin-token'];
   if (adminSecret && incoming && incoming === adminSecret) return true;
@@ -44,57 +44,41 @@ module.exports = async (req, res) => {
   }
 
   try {
-    if (req.method === 'POST') {
-      const allowed = await isAuthorized(req, supabase);
-      if (!allowed) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-    }
-
     if (req.method === 'GET') {
-      const query = await supabase
-        .from('menu_items')
-        .select('id,name,description,category,price,featured,is_available,image_url,prep_time,updated_at')
-        .order('featured', { ascending: false })
-        .order('name', { ascending: true });
-
+      const query = await supabase.from('categories').select('id,name,parent,created_at,updated_at').order('name', { ascending: true });
       if (query.error) return res.status(500).json({ error: query.error.message });
       return res.status(200).json({ items: query.data || [] });
     }
 
     if (req.method === 'POST') {
-      const body = req.body || {};
-      const products = Array.isArray(body.products) ? body.products : null;
-      if (!products) return res.status(400).json({ error: 'Missing products payload' });
+      const allowed = await authorize(req, supabase);
+      if (!allowed) return res.status(401).json({ error: 'Unauthorized' });
 
-      const rows = products
+      const body = req.body || {};
+      const categories = Array.isArray(body.categories) ? body.categories : null;
+      if (!categories) return res.status(400).json({ error: 'Missing categories payload' });
+
+      const rows = categories
         .filter((item) => item && item.name)
         .map((item) => ({
           id: item.id || (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`),
           name: String(item.name),
-          description: String(item.description || ''),
-          category: String(item.category || 'Uncategorized'),
-          price: Number.isFinite(Number(item.price)) ? Math.max(0, Number(item.price)) : 0,
-          featured: Boolean(item.featured),
-          is_available: item.is_available ?? true,
-          image_url: item.image_url ?? null,
-          prep_time: item.prep_time ?? null,
+          parent: item.parent ? String(item.parent) : null,
         }));
 
       const ids = rows.map((row) => row.id);
       if (ids.length) {
-        const remove = await supabase.from('menu_items').delete().not('id', 'in', `(${ids.join(',')})`);
+        const remove = await supabase.from('categories').delete().not('id', 'in', `(${ids.join(',')})`);
         if (remove.error) return res.status(500).json({ error: remove.error.message });
       } else {
-        const clear = await supabase.from('menu_items').delete().neq('id', '');
+        const clear = await supabase.from('categories').delete().neq('id', '');
         if (clear.error) return res.status(500).json({ error: clear.error.message });
       }
 
       const upsert = await supabase
-        .from('menu_items')
+        .from('categories')
         .upsert(rows, { onConflict: 'id' })
-        .select('id,name,description,category,price,featured,is_available,image_url,prep_time,updated_at')
-        .order('featured', { ascending: false })
+        .select('id,name,parent,created_at,updated_at')
         .order('name', { ascending: true });
 
       if (upsert.error) return res.status(500).json({ error: upsert.error.message });
