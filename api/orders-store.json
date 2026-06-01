@@ -1,5 +1,55 @@
 [
   {
+    "id": "ORD-1780282864364",
+    "customer_name": "Browser Proxy",
+    "customer_phone": "+63 912 334 5567",
+    "customer_email": null,
+    "fulfillment": "pickup",
+    "notes": null,
+    "items": [
+      {
+        "id": "ITEM-3",
+        "name": "Browser Americano",
+        "price": 110,
+        "quantity": 1
+      }
+    ],
+    "subtotal": 110,
+    "tax": 13.2,
+    "delivery_fee": 0,
+    "total": 123.2,
+    "status": "new",
+    "created_at": "2026-06-01T03:01:04.364Z",
+    "updated_at": "2026-06-01T03:01:04.364Z",
+    "delivery_lat": null,
+    "delivery_lng": null
+  },
+  {
+    "id": "ORD-1780282856874",
+    "customer_name": "Proxy User",
+    "customer_phone": "+63 945 678 9123",
+    "customer_email": null,
+    "fulfillment": "delivery",
+    "notes": null,
+    "items": [
+      {
+        "price": 120,
+        "quantity": 2,
+        "name": "Proxy Espresso",
+        "id": "ITEM-2"
+      }
+    ],
+    "subtotal": 240,
+    "tax": 28.8,
+    "delivery_fee": 55,
+    "total": 323.8,
+    "status": "new",
+    "created_at": "2026-06-01T03:00:56.874Z",
+    "updated_at": "2026-06-01T03:00:56.874Z",
+    "delivery_lat": null,
+    "delivery_lng": null
+  },
+  {
     "id": "ORD-1780282362263",
     "customer_name": "Test User",
     "customer_phone": "+63 912 345 6789",
