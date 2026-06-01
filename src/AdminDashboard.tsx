@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
-import { signIn, signOut, getCurrentStaffSession, StaffSession as AuthStaffSession } from './lib/auth';
+import { signIn, signOut, getCurrentStaffSession, getDemoSessionFromStorage, StaffSession as AuthStaffSession } from './lib/auth';
 import { emitMenuSync, readMenuCache, writeMenuCache } from './lib/menu';
 import { emitCategorySync, readCategoryCache, writeCategoryCache } from './lib/categories';
 import type { MenuItem, OrderStatus } from './types';
@@ -287,6 +287,20 @@ const mergeCategoriesById = (cachedCategories: CategoryRow[], remoteCategories: 
   return Array.from(byId.values());
 };
 
+const mergeOrdersById = (cachedOrders: OrderRow[], remoteOrders: OrderRow[]) => {
+  const byId = new Map<string, OrderRow>();
+
+  for (const order of remoteOrders) {
+    byId.set(order.id, order);
+  }
+
+  for (const order of cachedOrders) {
+    byId.set(order.id, order);
+  }
+
+  return Array.from(byId.values());
+};
+
 const AdminDashboard: React.FC = () => {
   const [staffSession, setStaffSession] = useState<AuthStaffSession | null>(null);
   const [loginForm, setLoginForm] = useState({ login: '', password: '' });
@@ -343,6 +357,13 @@ const AdminDashboard: React.FC = () => {
     const token = data.session?.access_token;
     if (token) {
       headers.Authorization = `Bearer ${token}`;
+    }
+
+    if (!token) {
+      const demoSession = getDemoSessionFromStorage();
+      if (demoSession) {
+        headers['x-demo-staff-session'] = JSON.stringify(demoSession);
+      }
     }
 
     return headers;
@@ -623,63 +644,41 @@ const AdminDashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase) return;
-    const db = supabase;
-
     const loadData = async () => {
-      const ordersResponse = await db
-        .from('orders')
-        .select('id,customer_name,customer_phone,fulfillment,status,total,created_at,delivery_lat,delivery_lng')
-        .order('created_at', { ascending: false })
-        .limit(8);
+      if (isSupabaseConfigured && supabase) {
+        const db = supabase;
+        const [ordersResponse, productsResponse, categoriesResponse, profilesResponse] = await Promise.all([
+          db.from('orders').select('id,customer_name,customer_phone,fulfillment,status,total,created_at,delivery_lat,delivery_lng').order('created_at', { ascending: false }).limit(8),
+          db.from('menu_items').select('id,name,description,category,price,featured,is_available').limit(12),
+          db.from('categories').select('id,name,parent').order('name', { ascending: true }).limit(50),
+          db.from('profiles').select('id,full_name,email,role').limit(20),
+        ]);
 
-      const productsResponse = await db
-        .from('menu_items')
-        .select('id,name,description,category,price,featured,is_available')
-        .limit(12);
-
-      const categoriesResponse = await db
-        .from('categories')
-        .select('id,name,parent')
-        .order('name', { ascending: true })
-        .limit(50);
-
-      const profilesResponse = await db.from('profiles').select('id,full_name,email,role').limit(20);
-
-      if (process.env.REACT_APP_ADMIN_API_SECRET) {
+        let localOrders: OrderRow[] = [];
         try {
-          const inventoryResponse = await fetch('/api/inventory', {
-            headers: {
-              'x-admin-secret': process.env.REACT_APP_ADMIN_API_SECRET,
-            },
-          });
-          if (inventoryResponse.ok) {
-            const inventoryPayload = await inventoryResponse.json();
-            if (Array.isArray(inventoryPayload.items) && inventoryPayload.items.length) {
-              const nextInventory = inventoryPayload.items.map((row: any) => ({
-                id: String(row.id ?? row.item_name ?? createInventoryId()),
-                product: String(row.item_name ?? row.product ?? 'Untitled'),
-                stock: Number(row.stock ?? 0),
-                threshold: Number(row.threshold ?? 0),
-                lastUpdated: formatInventoryTimestamp(row.updated_at),
+          const response = await fetch('/api/orders');
+          if (response.ok) {
+            const payload = await response.json();
+            if (Array.isArray(payload.items) && payload.items.length) {
+              localOrders = payload.items.map((row: any) => ({
+                id: String(row.id),
+                customer_name: row.customer_name ?? 'Guest',
+                customer_phone: row.customer_phone ?? 'n/a',
+                fulfillment: row.fulfillment ?? 'pickup',
+                status: row.status ?? 'new',
+                total: Number(row.total ?? 0),
+                created_at: String(row.created_at ?? new Date().toISOString()),
+                delivery_lat: row.delivery_lat ?? null,
+                delivery_lng: row.delivery_lng ?? null,
               }));
-              setInventory(nextInventory);
-              try {
-                window.localStorage.setItem(inventoryStorageKey, JSON.stringify(nextInventory));
-              } catch {
-                // Ignore local storage errors.
-              }
-              setSyncStatus({ label: 'Inventory loaded', state: 'saved' });
             }
           }
         } catch {
-          // Keep local inventory if the API is unavailable.
+          localOrders = [];
         }
-      }
 
-      if (!ordersResponse.error && ordersResponse.data?.length) {
-        setOrders(
-          ordersResponse.data.map((row: any) => ({
+        if (!ordersResponse.error && ordersResponse.data?.length) {
+          const remoteOrders = ordersResponse.data.map((row: any) => ({
             id: String(row.id),
             customer_name: row.customer_name ?? 'Guest',
             customer_phone: row.customer_phone ?? 'n/a',
@@ -689,51 +688,78 @@ const AdminDashboard: React.FC = () => {
             created_at: String(row.created_at ?? new Date().toISOString()),
             delivery_lat: row.delivery_lat ?? null,
             delivery_lng: row.delivery_lng ?? null,
-          })),
-        );
-      }
+          }));
+          setOrders(mergeOrdersById(localOrders, remoteOrders));
+        } else if (localOrders.length) {
+          setOrders(localOrders);
+        }
 
-      if (!productsResponse.error && productsResponse.data?.length) {
-        const remoteProducts = productsResponse.data.map((item: any) => ({
-          id: String(item.id),
-          name: item.name ?? 'Untitled',
-          description: item.description ?? '',
-          category: item.category ?? 'Uncategorized',
-          price: Number(item.price ?? 0),
-          featured: Boolean(item.featured),
-          is_available: item.is_available ?? true,
-        }));
-        const cachedProducts = readMenuCache() ?? [];
-        const nextProducts = mergeProductsById(cachedProducts, remoteProducts);
-        setProducts(nextProducts);
-        writeMenuCache(nextProducts);
-        setSyncStatus({ label: 'Products loaded', state: 'saved' });
-      }
+        if (!productsResponse.error && productsResponse.data?.length) {
+          const remoteProducts = productsResponse.data.map((item: any) => ({
+            id: String(item.id),
+            name: item.name ?? 'Untitled',
+            description: item.description ?? '',
+            category: item.category ?? 'Uncategorized',
+            price: Number(item.price ?? 0),
+            featured: Boolean(item.featured),
+            is_available: item.is_available ?? true,
+          }));
+          const cachedProducts = readMenuCache() ?? [];
+          const nextProducts = mergeProductsById(cachedProducts, remoteProducts);
+          setProducts(nextProducts);
+          writeMenuCache(nextProducts);
+          setSyncStatus({ label: 'Products loaded', state: 'saved' });
+        }
 
-      if (!categoriesResponse.error && categoriesResponse.data?.length) {
-        const remoteCategories = (categoriesResponse.data as Array<{ id: string; name?: string | null; parent?: string | null }>).map((item) => ({
-          id: String(item.id),
-          name: item.name ?? 'Untitled Category',
-          parent: item.parent ? String(item.parent) : undefined,
-        }));
-        const cachedCategories = readCategoryCache() ?? [];
-        const nextCategories = mergeCategoriesById(cachedCategories, remoteCategories);
-        setCategories(nextCategories);
-        writeCategoryCache(nextCategories);
-      }
+        if (!categoriesResponse.error && categoriesResponse.data?.length) {
+          const remoteCategories = (categoriesResponse.data as Array<{ id: string; name?: string | null; parent?: string | null }>).map((item) => ({
+            id: String(item.id),
+            name: item.name ?? 'Untitled Category',
+            parent: item.parent ? String(item.parent) : undefined,
+          }));
+          const cachedCategories = readCategoryCache() ?? [];
+          const nextCategories = mergeCategoriesById(cachedCategories, remoteCategories);
+          setCategories(nextCategories);
+          writeCategoryCache(nextCategories);
+        }
 
-      if (!profilesResponse.error && profilesResponse.data?.length) {
-        const profileRows = profilesResponse.data as ProfileRow[];
-        setStaffList(
-          profileRows
-            .filter((profile) => profile.role === 'admin' || profile.role === 'staff')
-            .map((profile) => ({
-              id: String(profile.id),
-              name: profile.full_name ?? String(profile.email ?? 'Staff'),
-              email: String(profile.email ?? ''),
-              role: profile.role as StaffRole,
-            })),
-        );
+        if (!profilesResponse.error && profilesResponse.data?.length) {
+          const profileRows = profilesResponse.data as ProfileRow[];
+          setStaffList(
+            profileRows
+              .filter((profile) => profile.role === 'admin' || profile.role === 'staff')
+              .map((profile) => ({
+                id: String(profile.id),
+                name: profile.full_name ?? String(profile.email ?? 'Staff'),
+                email: String(profile.email ?? ''),
+                role: profile.role as StaffRole,
+              })),
+          );
+        }
+      } else {
+        try {
+          const response = await fetch('/api/orders');
+          if (response.ok) {
+            const payload = await response.json();
+            if (Array.isArray(payload.items) && payload.items.length) {
+              setOrders(
+                payload.items.map((row: any) => ({
+                  id: String(row.id),
+                  customer_name: row.customer_name ?? 'Guest',
+                  customer_phone: row.customer_phone ?? 'n/a',
+                  fulfillment: row.fulfillment ?? 'pickup',
+                  status: row.status ?? 'new',
+                  total: Number(row.total ?? 0),
+                  created_at: String(row.created_at ?? new Date().toISOString()),
+                  delivery_lat: row.delivery_lat ?? null,
+                  delivery_lng: row.delivery_lng ?? null,
+                })),
+              );
+            }
+          }
+        } catch {
+          // Keep sample orders if the local API is unavailable.
+        }
       }
     };
 

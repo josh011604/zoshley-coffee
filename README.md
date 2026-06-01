@@ -77,3 +77,7 @@ If you don't set a token the app will use a small demo fallback for address sugg
 ## Admin inventory sync
 
 Inventory stock changes can sync through the local admin API when you run `npm run dev:api` and set `REACT_APP_ADMIN_API_SECRET` in your environment.
+
+## Admin order sync
+
+Order status changes use the same local API. In demo mode, the browser sends a demo staff session to the local API so order processing can still persist while you are running the app without Supabase auth.

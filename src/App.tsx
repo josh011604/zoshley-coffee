@@ -549,39 +549,27 @@ export default function App() {
       payload.delivery_lat = orderForm.deliveryLat;
       payload.delivery_lng = orderForm.deliveryLng;
     }
-
-    if (!supabase) {
-      setBanner('Local mode only. Connect Supabase to store this order.');
-      setSubmitting(false);
-      return;
-    }
-
-    let resultError = null as any;
-
     try {
-      const res = await supabase.from('orders').insert(payload);
-      resultError = res.error;
-    } catch (e) {
-      resultError = e;
-    }
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    // If the insert failed due to missing delivery columns, retry without coords
-    if (resultError) {
-      const msg = String(resultError.message ?? resultError);
-      const missingCoords = /delivery_lat|delivery_lng|Could not find the 'delivery_lat'|Could not find the 'delivery_lng'|column "delivery_lat" of relation "orders" does not exist/i.test(msg);
-      if (missingCoords) {
-        const { delivery_lat, delivery_lng, ...payloadWithoutCoords } = payload as any;
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = errorText;
         try {
-          const retry = await supabase.from('orders').insert(payloadWithoutCoords);
-          resultError = retry.error;
-        } catch (e) {
-          resultError = e;
+          const json = JSON.parse(errorText);
+          if (json?.error) errorMessage = json.error;
+        } catch {
+          // Keep raw text when JSON is not available.
         }
+        throw new Error(errorMessage || 'Unknown error');
       }
-    }
-
-    if (resultError) {
-      setBanner(`Order save failed: ${String(resultError.message ?? resultError)}`);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setBanner(`Order save failed: ${message}`);
       setSubmitting(false);
       return;
     }
@@ -593,7 +581,7 @@ export default function App() {
     setOrderSuccessOpen(true);
     setOrderForm(initialOrderForm);
     clearCheckoutDraft();
-    setBanner('Order saved to Supabase.');
+    setBanner(supabase ? 'Order saved to Supabase.' : 'Order saved locally.');
     setSubmitting(false);
     closeCheckout();
   };

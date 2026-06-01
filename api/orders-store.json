@@ -1,0 +1,81 @@
+[
+  {
+    "id": "ORD-1780282362263",
+    "customer_name": "Test User",
+    "customer_phone": "+63 912 345 6789",
+    "customer_email": null,
+    "fulfillment": "pickup",
+    "notes": null,
+    "items": [
+      {
+        "price": 150,
+        "quantity": 1,
+        "name": "Test Coffee",
+        "id": "ITEM-1"
+      }
+    ],
+    "subtotal": 150,
+    "tax": 18,
+    "delivery_fee": 0,
+    "total": 168,
+    "status": "new",
+    "created_at": "2026-06-01T02:52:42.263Z",
+    "updated_at": "2026-06-01T02:52:42.264Z",
+    "delivery_lat": null,
+    "delivery_lng": null
+  },
+  {
+    "id": "ORD-3241",
+    "customer_name": "Anna Santos",
+    "customer_phone": "+63 917 123 4567",
+    "customer_email": null,
+    "fulfillment": "pickup",
+    "notes": null,
+    "items": [],
+    "subtotal": 325,
+    "tax": 39,
+    "delivery_fee": 0,
+    "total": 364,
+    "status": "new",
+    "created_at": "2026-05-24T10:18:00Z",
+    "updated_at": "2026-05-24T10:18:00Z",
+    "delivery_lat": null,
+    "delivery_lng": null
+  },
+  {
+    "id": "ORD-3240",
+    "customer_name": "Miguel Cruz",
+    "customer_phone": "+63 917 987 6543",
+    "customer_email": null,
+    "fulfillment": "delivery",
+    "notes": null,
+    "items": [],
+    "subtotal": 455,
+    "tax": 55,
+    "delivery_fee": 55,
+    "total": 565,
+    "status": "preparing",
+    "created_at": "2026-05-24T09:58:00Z",
+    "updated_at": "2026-05-24T09:58:00Z",
+    "delivery_lat": null,
+    "delivery_lng": null
+  },
+  {
+    "id": "ORD-3239",
+    "customer_name": "Bea Reyes",
+    "customer_phone": "+63 917 222 3344",
+    "customer_email": null,
+    "fulfillment": "pickup",
+    "notes": null,
+    "items": [],
+    "subtotal": 215,
+    "tax": 26,
+    "delivery_fee": 0,
+    "total": 241,
+    "status": "ready",
+    "created_at": "2026-05-24T09:12:00Z",
+    "updated_at": "2026-05-24T09:12:00Z",
+    "delivery_lat": null,
+    "delivery_lng": null
+  }
+]

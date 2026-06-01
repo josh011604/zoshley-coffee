@@ -24,7 +24,7 @@ const demoStaffUsers: DemoStaffUser[] = [
   { username: 'juan', email: 'juan@zoshley.com', password: 'staff456', name: 'Juan dela Cruz', role: 'staff' },
 ];
 
-const getDemoSessionFromStorage = (): StaffSession | null => {
+export const getDemoSessionFromStorage = (): StaffSession | null => {
   try {
     const raw = window.localStorage.getItem(DEMO_STAFF_SESSION_KEY);
     if (!raw) return null;
