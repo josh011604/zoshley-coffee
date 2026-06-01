@@ -48,6 +48,20 @@ test.describe('Admin + ordering smoke', () => {
     await expect(page.getByText('Order placed')).toBeVisible({ timeout: 10_000 });
   });
 
+  test('admin can process an existing order', async ({ page }) => {
+    await seedAdminSession(page);
+    await page.goto(`${BASE}/#/admin`);
+
+    await expect(page.getByRole('heading', { name: 'Coffee Shop Admin Console' })).toBeVisible({ timeout: 10_000 });
+
+    await page.getByRole('button', { name: /Orders/i }).click();
+    await page.getByRole('button', { name: /View details/i }).first().click();
+
+    await expect(page.getByText('Process order')).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: /Mark preparing/i }).click();
+    await expect(page.getByRole('main').getByText(/^confirmed$/i).first()).toBeVisible({ timeout: 10_000 });
+  });
+
   test('new admin products appear in the storefront menu', async ({ page }) => {
     await seedAdminSession(page);
     await page.goto(`${BASE}/#/admin`);

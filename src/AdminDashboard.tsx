@@ -3,7 +3,7 @@ import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { signIn, signOut, getCurrentStaffSession, StaffSession as AuthStaffSession } from './lib/auth';
 import { emitMenuSync, readMenuCache, writeMenuCache } from './lib/menu';
 import { emitCategorySync, readCategoryCache, writeCategoryCache } from './lib/categories';
-import type { MenuItem } from './types';
+import type { MenuItem, OrderStatus } from './types';
 import AdminLoginPanel from './components/AdminLoginPanel';
 
 type StaffRole = 'admin' | 'staff';
@@ -23,7 +23,7 @@ type OrderRow = {
   customer_name: string;
   customer_phone: string;
   fulfillment: string;
-  status: string;
+  status: OrderStatus;
   total: number;
   created_at: string;
   delivery_lat?: number | null;
@@ -222,6 +222,43 @@ const orderTimeline = (status: string) => [
   { label: 'Completed', active: status === 'completed' },
 ];
 
+const orderStatusLabels: Record<OrderStatus, string> = {
+  new: 'Confirm order',
+  confirmed: 'Mark preparing',
+  preparing: 'Mark ready',
+  ready: 'Mark out for delivery',
+  out_for_delivery: 'Mark completed',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+const orderStatusActions = (order: OrderRow) => {
+  if (order.status === 'cancelled' || order.status === 'completed') {
+    return [] as Array<{ label: string; status: OrderStatus; variant?: 'primary' | 'secondary' | 'danger' }>;
+  }
+
+  const actions: Array<{ label: string; status: OrderStatus; variant?: 'primary' | 'secondary' | 'danger' }> = [];
+
+  if (order.status === 'new') {
+    actions.push({ label: orderStatusLabels.confirmed, status: 'confirmed', variant: 'primary' });
+  } else if (order.status === 'confirmed') {
+    actions.push({ label: orderStatusLabels.preparing, status: 'preparing', variant: 'primary' });
+  } else if (order.status === 'preparing') {
+    actions.push({ label: orderStatusLabels.ready, status: 'ready', variant: 'primary' });
+  } else if (order.status === 'ready') {
+    actions.push({
+      label: order.fulfillment === 'delivery' ? orderStatusLabels.out_for_delivery : orderStatusLabels.completed,
+      status: order.fulfillment === 'delivery' ? 'out_for_delivery' : 'completed',
+      variant: 'primary',
+    });
+  } else if (order.status === 'out_for_delivery') {
+    actions.push({ label: orderStatusLabels.completed, status: 'completed', variant: 'primary' });
+  }
+
+  actions.push({ label: 'Cancel order', status: 'cancelled', variant: 'danger' });
+  return actions;
+};
+
 const mergeProductsById = (cachedProducts: MenuItem[], remoteProducts: MenuItem[]) => {
   const byId = new Map<string, MenuItem>();
 
@@ -288,6 +325,7 @@ const AdminDashboard: React.FC = () => {
   const [reportRange, setReportRange] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [editModal, setEditModal] = useState<EditModalState>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>({ label: 'Ready to save', state: 'idle' });
+  const [orderStatusMessage, setOrderStatusMessage] = useState<SyncStatus>({ label: 'Select an order to update', state: 'idle' });
 
   const getAdminApiHeaders = async () => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -738,11 +776,35 @@ const AdminDashboard: React.FC = () => {
   const openOrderModal = (order: OrderRow) => {
     setSelectedOrder(order);
     setOrderModalOpen(true);
+    setOrderStatusMessage({ label: 'Select an order to update', state: 'idle' });
   };
 
   const closeOrderModal = () => {
     setSelectedOrder(null);
     setOrderModalOpen(false);
+    setOrderStatusMessage({ label: 'Select an order to update', state: 'idle' });
+  };
+
+  const updateOrderStatus = async (order: OrderRow, status: OrderStatus) => {
+    setOrderStatusMessage({ label: `Updating ${order.id}`, state: 'saving' });
+    setOrders((current) => current.map((item) => (item.id === order.id ? { ...item, status } : item)));
+    setSelectedOrder((current) => (current && current.id === order.id ? { ...current, status } : current));
+
+    try {
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: await getAdminApiHeaders(),
+        body: JSON.stringify({ orderId: order.id, status }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      setOrderStatusMessage({ label: `Order ${orderStatusLabels[status].toLowerCase()}`, state: 'saved' });
+    } catch {
+      setOrderStatusMessage({ label: `Saved locally, but server sync failed for ${order.id}`, state: 'error' });
+    }
   };
 
   const renderStatusPill = (status: string) => (
@@ -913,7 +975,7 @@ const AdminDashboard: React.FC = () => {
                         <p className="text-xs uppercase tracking-[0.28em] text-cream/45">Orders</p>
                         <h2 className="mt-2 font-display text-3xl text-cream">Order management</h2>
                       </div>
-                      <p className="max-w-xl text-sm text-cream/70">View recent orders, customer details, and status history in a read-only modal.</p>
+                        <p className="max-w-xl text-sm text-cream/70">View recent orders, customer details, and move each order through fulfillment from the modal.</p>
                     </div>
                     <div className="grid gap-4">
                       {orders.map((order) => (
@@ -1437,6 +1499,45 @@ const AdminDashboard: React.FC = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+            <div className="mt-6 rounded-[1.75rem] border border-white/10 bg-black/20 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm uppercase tracking-[0.28em] text-cream/45">Process order</p>
+                  <p className="mt-2 text-sm text-cream/70">Use these controls to advance or cancel the order.</p>
+                </div>
+                <span
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                    orderStatusMessage.state === 'saving'
+                      ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+                      : orderStatusMessage.state === 'saved'
+                        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                        : orderStatusMessage.state === 'error'
+                          ? 'border-red-500/30 bg-red-500/10 text-red-200'
+                          : 'border-white/10 bg-white/5 text-cream/60'
+                  }`}
+                >
+                  {orderStatusMessage.label}
+                </span>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                {selectedOrder ? (
+                  orderStatusActions(selectedOrder).map((action) => (
+                    <button
+                      key={`${selectedOrder.id}-${action.status}`}
+                      type="button"
+                      onClick={() => void updateOrderStatus(selectedOrder, action.status)}
+                      className={`rounded-full px-4 py-3 text-sm font-semibold transition ${
+                        action.variant === 'danger'
+                          ? 'border border-red-500/20 bg-red-500/10 text-red-100 hover:border-red-400/40'
+                          : 'bg-gold text-coffee-950 hover:brightness-110'
+                      }`}
+                    >
+                      {action.label}
+                    </button>
+                  ))
+                ) : null}
               </div>
             </div>
           </div>
